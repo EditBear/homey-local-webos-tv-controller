@@ -72,6 +72,8 @@ run:
 ```
 
 See `RECOVERY.md` for the preservation boundaries and recovery procedure.
+The maintenance-tool update and its byte-for-byte runtime comparison are
+recorded in `RUNTIME-EQUIVALENCE.md`.
 
 ## Support
 

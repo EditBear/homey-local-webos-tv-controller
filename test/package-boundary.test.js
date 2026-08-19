@@ -19,15 +19,15 @@ assert(
   'npm must remain a development-only build tool, not a runtime dependency',
 );
 assert(
-  packageManifest.devDependencies?.npm === '11.6.2',
+  packageManifest.devDependencies?.npm === '11.19.0',
   'package.json must pin the approved project-local npm development dependency',
 );
 assert(
-  packageLock.packages?.['']?.devDependencies?.npm === '11.6.2',
+  packageLock.packages?.['']?.devDependencies?.npm === '11.19.0',
   'The lockfile root must preserve the approved npm development dependency',
 );
 assert(
-  packageLock.packages?.['node_modules/npm']?.version === '11.6.2',
+  packageLock.packages?.['node_modules/npm']?.version === '11.19.0',
   'The lockfile must resolve the approved project-local npm version',
 );
 
