@@ -1,0 +1,3 @@
+Bedien compatibele LG webOS-televisies lokaal via je thuisnetwerk. Schakel de televisie in, controleer de aan-uitstatus en de actieve bron, selecteer kanalen, apps en HDMI-ingangen en gebruik dempen of afstandsbedieningscommando’s in je automatiseringen.
+
+Maak Flows die reageren op wijzigingen van kanaal, app, ingang, geluidsuitgang en dempen, of toon meldingen op de televisie. Deze gespecialiseerde televisie-integratie vult bredere apparaatdiensten aan. Functies zijn afhankelijk van het televisiemodel en de instellingen; externe ARC- of eARC-systemen kunnen hun eigen volumeniveau behouden. Probleemmeldingen zijn welkom via het vermelde supportadres, maar deze communityrelease wordt naar beste vermogen aangeboden zonder gegarandeerde reactietijd of updateschema.

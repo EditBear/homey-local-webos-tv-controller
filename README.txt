@@ -1,0 +1,3 @@
+Control compatible LG webOS televisions locally through your home network. Wake the television, monitor power and the active source, select channels, applications and HDMI inputs, and use mute or remote-control commands in your automations.
+
+Create Flows that react to channel, application, input, sound-output and mute changes, or show notifications on the television. This specialist television integration complements broader appliance services. Functions depend on the television model and settings; external ARC or eARC systems may retain their own volume level. Problem reports are welcomed at the listed support address, but this community release is provided on a best-effort basis without a guaranteed response or update schedule.

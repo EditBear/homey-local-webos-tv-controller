@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="79" height="79" viewBox="0 0 79 79" xmlns="http://www.w3.org/2000/svg">
+  <title>Local webOS TV Controller</title>
+  <g fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="12" width="51" height="43" rx="6"/>
+    <path d="M19 67h23M25 55l-3 12M36 55l3 12"/>
+    <path d="M56 24h7M56 39h7M56 52h7"/>
+    <path d="M68 24v28"/>
+    <circle cx="68" cy="24" r="4" fill="#FFFFFF" stroke="none"/>
+    <circle cx="68" cy="39" r="4" fill="#FFFFFF" stroke="none"/>
+    <circle cx="68" cy="52" r="4" fill="#FFFFFF" stroke="none"/>
+  </g>
+</svg>

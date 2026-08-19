@@ -1,0 +1,122 @@
+{
+  "1.0.43": {
+    "en": "Prepared the independently published Local webOS TV Controller community release with original Store artwork, clear upstream credit and unchanged television-control behaviour from the live-verified 1.0.42 baseline."
+  },
+  "1.0.42": {
+    "en": "Removed the unusable inherited Artwork token after the LG G4 returned HTTP 404 for every tested app-icon source; all verified Flow cards remain unchanged."
+  },
+  "1.0.41": {
+    "en": "Ensured existing-device capability migration completes before connecting, so all LG power, volume, app, sound-output and channel subscriptions start reliably after an upgrade."
+  },
+  "1.0.40": {
+    "en": "Replaced misleading Artist, Track and Album change cards with accurately named app/input and channel display values while retaining the proven dedicated Flow cards."
+  },
+  "1.0.39": {
+    "en": "Prevented brief LG WebSocket restarts from generating false television off/on Flow events while retaining confirmed power-state detection."
+  },
+  "1.0.38": {
+    "en": "Removed the unsupported image-token notification card after repeated LG G4 tests timed out, while retaining the working notification card with its optional icon field."
+  },
+  "1.0.37": {
+    "en": "Replaced the misleading generated Next and Previous cards with accurately named Fast forward and Rewind actions after live LG G4 USB-recording tests verified their actual behaviour."
+  },
+  "1.0.36": {
+    "en": "Removed the inherited Is playing condition after LG G4 protocol and live playback tests proved that the television does not expose a reliable playback-state signal. Play, Pause and Toggle actions remain available."
+  },
+  "1.0.34": {
+    "en": "Reinstated the inherited Is playing condition for further controlled user testing while retaining all live-verified volume and mute repairs."
+  },
+  "1.0.33": {
+    "en": "Added compatibility with the LG G4's nested live volume and mute response while retaining support for the inherited response format."
+  },
+  "1.0.32": {
+    "en": "Repaired relative-volume migration and live volume/mute conditions, and replaced the unreliable playback-state condition with explicit media command cards."
+  },
+  "1.0.31": {
+    "en": "Corrected existing-device volume capability options to Homey's normalized percentage scale without changing the known-good pairing and discovery implementation."
+  },
+  "1.0.27": {
+    "en": "Clarified the two channel cards and limited app choices to user-facing launch targets."
+  },
+  "1.0.26": {
+    "en": "Verified channel changes after LG acknowledgement and added a fallback check for silently stale Live TV channel information."
+  },
+  "1.0.25": {
+    "en": "Completed LG's two-stage authorisation handshake and saved the accepted key before connecting."
+  },
+  "1.0.24": {
+    "en": "Completed the required dropped-image placeholder in the notification Flow title."
+  },
+  "1.0.23": {
+    "en": "Completed required formatted Flow titles for alert and notification arguments."
+  },
+  "1.0.22": {
+    "en": "Corrected channel-token examples and added manifest-schema and translation consistency checks."
+  },
+  "1.0.21": {
+    "en": "Cancelled timed-alert work during reconnect or deletion and removed legacy plaintext key-file handling."
+  },
+  "1.0.20": {
+    "en": "Added the required driver icon and strengthened offline Store-manifest checks."
+  },
+  "1.0.19": {
+    "en": "Bounded and shared remote-button socket connections so failed button actions cannot hang."
+  },
+  "1.0.18": {
+    "en": "Prevented overlapping LG connection attempts and cancelled reconnect work after deliberate disconnect."
+  },
+  "1.0.17": {
+    "en": "Prevented pending LG commands from hanging after WebSocket disconnection or registration timeout."
+  },
+  "1.0.16": {
+    "en": "Isolated LG registration payloads so multiple televisions cannot share mutable pairing state."
+  },
+  "1.0.15": {
+    "en": "Prevented transient power-subscription errors from incorrectly marking the television off."
+  },
+  "1.0.14": {
+    "en": "Removed an unnecessary development dependency and regenerated the dependency lockfile."
+  },
+  "1.0.13": {
+    "en": "Tightened package exclusions for development, generated and sensitive files."
+  },
+  "1.0.12": {
+    "en": "Improved pairing resilience when discovery data, addresses or MAC information are invalid."
+  },
+  "1.0.11": {
+    "en": "Aligned declared device capabilities with runtime behaviour and added manifest-to-handler consistency checks."
+  },
+  "1.0.10": {
+    "en": "Serialised reconnection and ignored stale callbacks after connection replacement or device deletion."
+  },
+  "1.0.9": {
+    "en": "Added bounded network requests, image-size limits and safer alert input validation."
+  },
+  "1.0.8": {
+    "en": "Stored LG pairing credentials privately and improved Node.js 22 network and buffer compatibility."
+  },
+  "1.0.7": {
+    "en": "Improved Store descriptions and corrected English and Dutch Flow-card wording without changing card identifiers or television-control behaviour."
+  },
+  "1.0.6": {
+    "en": "Declared the app as a local Homey LAN integration and tightened exclusions for development, evidence and secret-bearing files."
+  },
+  "1.0.5": {
+    "en": "Registered Flow cards once per app start and made pairing, autocomplete and discovery errors complete reliably instead of hanging or being hidden."
+  },
+  "1.0.4": {
+    "en": "Flow actions now report failed LG commands as errors instead of completing successfully or changing Homey state prematurely."
+  },
+  "1.0.3": {
+    "en": "Added bounded recovery for failed Live TV channel subscriptions without creating duplicate active subscriptions."
+  },
+  "1.0.2": {
+    "en": "Improved reconnection after TV address or polling changes and ignored stale events from replaced connections."
+  },
+  "1.0.1": {
+    "en": "Corrected the volume card's percentage scale and LG/Homey volume conversion. External ARC/eARC audio devices may retain their own volume."
+  },
+  "1.0.0": {
+    "en": "Created an independently identified development fork from the frozen, tested LG G4 source. No intended television-control behaviour changed."
+  }
+}

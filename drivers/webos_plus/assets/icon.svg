@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="79" height="79" viewBox="0 0 79 79" xmlns="http://www.w3.org/2000/svg">
+  <title>Television</title>
+  <g fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="7" y="13" width="65" height="45" rx="5"/>
+    <path d="M31 58l-5 9h27l-5-9M18 25h43v22H18z"/>
+    <path d="M29 39l7-7 6 6 8-9 5 5"/>
+  </g>
+</svg>

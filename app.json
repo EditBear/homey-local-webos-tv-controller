@@ -1,0 +1,1644 @@
+{
+  "id": "com.rompa.webos-plus-g4",
+  "version": "1.0.43",
+  "compatibility": ">=5.0.0",
+  "runtime": "nodejs",
+  "platforms": [
+    "local"
+  ],
+  "sdk": 3,
+  "name": {
+    "en": "Local webOS TV Controller",
+    "nl": "Lokale webOS-tv-controller"
+  },
+  "brandColor": "#123C4A",
+  "description": {
+    "en": "Bring local television control into your everyday Flows",
+    "nl": "Neem lokale televisiebediening op in je dagelijkse Flows"
+  },
+  "tags": {
+    "en": [
+      "lg",
+      "lgtv",
+      "WebOS",
+      "tv",
+      "television",
+      "video"
+    ],
+    "nl": [
+      "lg",
+      "lgtv",
+      "WebOS",
+      "tv",
+      "televisie",
+      "video"
+    ]
+  },
+  "category": "video",
+  "images": {
+    "large": "/assets/images/large.png",
+    "small": "/assets/images/small.png",
+    "xlarge": "/assets/images/xlarge.png"
+  },
+  "author": {
+    "name": "John Bear"
+  },
+  "contributors": {
+    "developers": [
+      {
+        "name": "Max van de Laar"
+      },
+      {
+        "name": "Dominic Vonk"
+      },
+      {
+        "name": "Paul Molensky"
+      }
+    ],
+    "translators": [
+      {
+        "name": "Max van de Laar"
+      }
+    ]
+  },
+  "support": "mailto:wakeful.issue_8i@icloud.com",
+  "source": "https://github.com/EditBear/homey-local-webos-tv-controller",
+  "bugs": {
+    "url": "https://github.com/EditBear/homey-local-webos-tv-controller/issues"
+  },
+  "discovery": {
+    "webos": {
+      "type": "ssdp",
+      "ssdp": {
+        "search": "urn:lge-com:service:webos-second-screen:1"
+      },
+      "id": "{{headers.usn}}",
+      "conditions": [
+        [
+          {
+            "field": "headers.st",
+            "match": {
+              "type": "string",
+              "value": "urn:lge-com:service:webos-second-screen:1"
+            }
+          }
+        ]
+      ]
+    }
+  },
+  "capabilities": {
+    "webos_display": {
+      "type": "string",
+      "title": {
+        "en": "TV information",
+        "nl": "TV-informatie"
+      },
+      "getable": true,
+      "setable": false,
+      "uiComponent": "sensor"
+    }
+  },
+  "flow": {
+    "triggers": [
+      {
+        "id": "webos_channel_changed",
+        "title": {
+          "en": "Channel changed",
+          "nl": "Kanaal gewijzigd"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "oldChannel",
+            "type": "string",
+            "title": {
+              "en": "Previous channel",
+              "nl": "Vorig kanaal"
+            },
+            "example": "1"
+          },
+          {
+            "name": "newChannel",
+            "type": "string",
+            "title": {
+              "en": "Current channel",
+              "nl": "Huidig kanaal"
+            },
+            "example": "2"
+          }
+        ]
+      },
+      {
+        "id": "webos_channel_changed_to_number",
+        "title": {
+          "en": "Channel changed to number",
+          "nl": "Kanaal gewijzigd naar nummer"
+        },
+        "titleFormatted": {
+          "en": "Channel changed to [[channel]]",
+          "nl": "Kanaal gewijzigd naar [[channel]]"
+        },
+        "args": [
+          {
+            "name": "channel",
+            "title": {
+              "en": "Channel",
+              "nl": "Kanaal"
+            },
+            "type": "number",
+            "min": 0,
+            "step": 1
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "oldChannel",
+            "type": "string",
+            "title": {
+              "en": "Previous channel",
+              "nl": "Vorig kanaal"
+            },
+            "example": "1"
+          },
+          {
+            "name": "newChannel",
+            "type": "string",
+            "title": {
+              "en": "Current channel",
+              "nl": "Huidig kanaal"
+            },
+            "example": "2"
+          }
+        ]
+      },
+      {
+        "id": "webos_channel_changed_to_list",
+        "title": {
+          "en": "Channel changed to selection",
+          "nl": "Kanaal gewijzigd naar selectie"
+        },
+        "titleFormatted": {
+          "en": "Channel changed to [[channel]]",
+          "nl": "Kanaal gewijzigd naar [[channel]]"
+        },
+        "args": [
+          {
+            "name": "channel",
+            "title": {
+              "en": "Channel",
+              "nl": "Kanaal"
+            },
+            "type": "autocomplete",
+            "placeholder": {
+              "en": "Turn on the TV to load choices",
+              "nl": "Zet de TV aan om keuzes te laden"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "oldChannel",
+            "type": "string",
+            "title": {
+              "en": "Previous channel",
+              "nl": "Vorig kanaal"
+            },
+            "example": "1"
+          },
+          {
+            "name": "newChannel",
+            "type": "string",
+            "title": {
+              "en": "Current channel",
+              "nl": "Huidig kanaal"
+            },
+            "example": "2"
+          }
+        ]
+      },
+      {
+        "id": "webos_volume_muted",
+        "title": {
+          "en": "Volume muted",
+          "nl": "Geluid gedempt"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_volume_unmuted",
+        "title": {
+          "en": "Volume unmuted",
+          "nl": "Geluid niet meer gedempt"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_app_changed",
+        "title": {
+          "en": "App or input changed",
+          "nl": "App of ingang gewijzigd"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "oldApp",
+            "type": "string",
+            "title": {
+              "en": "Previous app or input",
+              "nl": "Vorige app of input"
+            },
+            "example": "com.webos.app.livetv"
+          },
+          {
+            "name": "newApp",
+            "type": "string",
+            "title": {
+              "en": "Current app or input",
+              "nl": "Huidige app of input"
+            },
+            "example": "com.webos.app.hdmi3"
+          }
+        ]
+      },
+      {
+        "id": "webos_app_changed_to",
+        "title": {
+          "en": "App or input changed to selection",
+          "nl": "App of ingang gewijzigd naar selectie"
+        },
+        "titleFormatted": {
+          "en": "App or input changed to [[app]]",
+          "nl": "App of ingang gewijzigd naar [[app]]"
+        },
+        "args": [
+          {
+            "name": "app",
+            "title": {
+              "en": "App or input",
+              "nl": "App of ingang"
+            },
+            "type": "autocomplete",
+            "placeholder": {
+              "en": "Turn on the TV to load choices",
+              "nl": "Zet de TV aan om keuzes te laden"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "oldApp",
+            "type": "string",
+            "title": {
+              "en": "Previous app or input",
+              "nl": "Vorige app of input"
+            },
+            "example": "com.webos.app.livetv"
+          },
+          {
+            "name": "newApp",
+            "type": "string",
+            "title": {
+              "en": "Current app or input",
+              "nl": "Huidige app of input"
+            },
+            "example": "com.webos.app.hdmi3"
+          }
+        ]
+      },
+      {
+        "id": "webos_sound_output_changed",
+        "title": {
+          "en": "Sound output changed",
+          "nl": "Geluidsuitgang gewijzigd"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "oldSoundOutput",
+            "type": "string",
+            "title": {
+              "en": "Previous sound output",
+              "nl": "Vorige geluidsuitgang"
+            },
+            "example": "tv_speaker"
+          },
+          {
+            "name": "newSoundOutput",
+            "type": "string",
+            "title": {
+              "en": "Current sound output",
+              "nl": "Huidige geluidsuitgang"
+            },
+            "example": "headphone"
+          }
+        ]
+      },
+      {
+        "id": "webos_sound_output_changed_to",
+        "title": {
+          "en": "Sound output changed to selection",
+          "nl": "Geluidsuitgang gewijzigd naar selectie"
+        },
+        "titleFormatted": {
+          "en": "Sound output changed to [[output]]",
+          "nl": "Geluidsuitgang gewijzigd naar [[output]]"
+        },
+        "args": [
+          {
+            "name": "output",
+            "title": {
+              "en": "Sound output",
+              "nl": "Geluidsuitgang"
+            },
+            "type": "dropdown",
+            "placeholder": {
+              "en": "Select an output",
+              "nl": "Selecteer een uitgang"
+            },
+            "values": [
+              {
+                "id": "tv_speaker",
+                "label": {
+                  "en": "TV speaker",
+                  "nl": "TV speaker"
+                }
+              },
+              {
+                "id": "external_speaker",
+                "label": {
+                  "en": "External speaker",
+                  "nl": "Externe speaker"
+                }
+              },
+              {
+                "id": "external_optical",
+                "label": {
+                  "en": "External optical",
+                  "nl": "Externe optische"
+                }
+              },
+              {
+                "id": "external_arc",
+                "label": {
+                  "en": "External ARC",
+                  "nl": "Externe ARC"
+                }
+              },
+              {
+                "id": "lineout",
+                "label": {
+                  "en": "Line out",
+                  "nl": "Line out"
+                }
+              },
+              {
+                "id": "headphone",
+                "label": {
+                  "en": "Headphone",
+                  "nl": "Koptelefoon"
+                }
+              },
+              {
+                "id": "tv_external_speaker",
+                "label": {
+                  "en": "TV external speaker",
+                  "nl": "TV externe speaker"
+                }
+              },
+              {
+                "id": "tv_speaker_headphone",
+                "label": {
+                  "en": "TV speaker headphone",
+                  "nl": "TV speaker koptelefoon"
+                }
+              },
+              {
+                "id": "bt_soundbar",
+                "label": {
+                  "en": "Bluetooth soundbar",
+                  "nl": "Bluetooth soundbar"
+                }
+              }
+            ]
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "oldSoundOutput",
+            "type": "string",
+            "title": {
+              "en": "Previous sound output",
+              "nl": "Vorige geluidsuitgang"
+            },
+            "example": "tv_speaker"
+          },
+          {
+            "name": "newSoundOutput",
+            "type": "string",
+            "title": {
+              "en": "Current sound output",
+              "nl": "Huidige geluidsuitgang"
+            },
+            "example": "headphone"
+          }
+        ]
+      }
+    ],
+    "conditions": [
+      {
+        "id": "webos_sound_output",
+        "title": {
+          "en": "Sound output !{{is|isn't}}",
+          "nl": "Geluidsuitgang !{{is|is niet}}"
+        },
+        "titleFormatted": {
+          "en": "Sound output !{{is|isn't}} [[output]]",
+          "nl": "Geluidsuitgang !{{is|is niet}} [[output]]"
+        },
+        "args": [
+          {
+            "name": "output",
+            "title": {
+              "en": "Sound output",
+              "nl": "Geluidsuitgang"
+            },
+            "type": "dropdown",
+            "values": [
+              {
+                "id": "tv_speaker",
+                "label": {
+                  "en": "TV speaker",
+                  "nl": "TV speaker"
+                }
+              },
+              {
+                "id": "external_speaker",
+                "label": {
+                  "en": "External speaker",
+                  "nl": "Externe speaker"
+                }
+              },
+              {
+                "id": "external_optical",
+                "label": {
+                  "en": "External optical",
+                  "nl": "Externe optische"
+                }
+              },
+              {
+                "id": "external_arc",
+                "label": {
+                  "en": "External ARC",
+                  "nl": "Externe ARC"
+                }
+              },
+              {
+                "id": "lineout",
+                "label": {
+                  "en": "Line out",
+                  "nl": "Line out"
+                }
+              },
+              {
+                "id": "headphone",
+                "label": {
+                  "en": "Headphone",
+                  "nl": "Koptelefoon"
+                }
+              },
+              {
+                "id": "tv_external_speaker",
+                "label": {
+                  "en": "TV external speaker",
+                  "nl": "TV externe speaker"
+                }
+              },
+              {
+                "id": "tv_speaker_headphone",
+                "label": {
+                  "en": "TV speaker headphone",
+                  "nl": "TV speaker koptelefoon"
+                }
+              },
+              {
+                "id": "bt_soundbar",
+                "label": {
+                  "en": "Bluetooth soundbar",
+                  "nl": "Bluetooth soundbar"
+                }
+              }
+            ]
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_channel_number",
+        "title": {
+          "en": "Channel number !{{is|isn't}}",
+          "nl": "Kanaalnummer !{{is|is niet}}"
+        },
+        "titleFormatted": {
+          "en": "Channel number !{{is|isn't}} [[channel]]",
+          "nl": "Kanaalnummer !{{is|is niet}} [[channel]]"
+        },
+        "args": [
+          {
+            "name": "channel",
+            "title": {
+              "en": "Channel",
+              "nl": "Kanaal"
+            },
+            "type": "number",
+            "min": 0,
+            "step": 1
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_channel_list",
+        "title": {
+          "en": "Selected channel !{{is|isn't}}",
+          "nl": "Geselecteerd kanaal !{{is|is niet}}"
+        },
+        "titleFormatted": {
+          "en": "Selected channel !{{is|isn't}} [[channel]]",
+          "nl": "Geselecteerd kanaal !{{is|is niet}} [[channel]]"
+        },
+        "args": [
+          {
+            "name": "channel",
+            "title": {
+              "en": "Channel",
+              "nl": "Kanaal"
+            },
+            "type": "autocomplete",
+            "placeholder": {
+              "en": "Turn on the TV to load choices",
+              "nl": "Zet de TV aan om keuzes te laden"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_muted",
+        "title": {
+          "en": "TV !{{is|isn't}} muted",
+          "nl": "TV !{{is|is niet}} gedempt"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_volume_equals",
+        "title": {
+          "en": "Volume !{{equals|doesn't equal}}",
+          "nl": "Het volume !{{is|is niet}} gelijk aan"
+        },
+        "titleFormatted": {
+          "en": "Volume !{{equals|doesn't equal}} [[volume]]%",
+          "nl": "Het volume !{{is|is niet}} gelijk aan [[volume]]%"
+        },
+        "args": [
+          {
+            "name": "volume",
+            "title": {
+              "en": "Volume",
+              "nl": "Volume"
+            },
+            "type": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_volume_smaller",
+        "title": {
+          "en": "Volume !{{is|isn't}} below",
+          "nl": "Het volume !{{is|is niet}} kleiner dan"
+        },
+        "titleFormatted": {
+          "en": "Volume !{{is|isn't}} below [[volume]]%",
+          "nl": "Het volume !{{is|is niet}} kleiner dan [[volume]]%"
+        },
+        "args": [
+          {
+            "name": "volume",
+            "title": {
+              "en": "Volume",
+              "nl": "Volume"
+            },
+            "type": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_volume_larger",
+        "title": {
+          "en": "Volume !{{is|isn't}} above",
+          "nl": "Het volume !{{is|is niet}} groter dan"
+        },
+        "titleFormatted": {
+          "en": "Volume !{{is|isn't}} above [[volume]]%",
+          "nl": "Het volume !{{is|is niet}} groter dan [[volume]]%"
+        },
+        "args": [
+          {
+            "name": "volume",
+            "title": {
+              "en": "Volume",
+              "nl": "Volume"
+            },
+            "type": "number",
+            "min": 0,
+            "max": 100,
+            "step": 1
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_app",
+        "title": {
+          "en": "App or input !{{is|isn't}}",
+          "nl": "App of ingang !{{is|is niet}}"
+        },
+        "titleFormatted": {
+          "en": "App or input !{{is|isn't}} [[app]]",
+          "nl": "App of ingang !{{is|is niet}} [[app]]"
+        },
+        "args": [
+          {
+            "name": "app",
+            "title": {
+              "en": "App or input",
+              "nl": "App of ingang"
+            },
+            "type": "autocomplete",
+            "placeholder": {
+              "en": "Turn on the TV to load choices",
+              "nl": "Zet de TV aan om keuzes te laden"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      }
+    ],
+    "actions": [
+      {
+        "id": "send_alert",
+        "title": {
+          "en": "Show alert",
+          "nl": "Toon waarschuwing"
+        },
+        "titleFormatted": {
+          "en": "Show alert [[title]]: [[message]] with [[buttons]] for [[timeout]] seconds",
+          "nl": "Toon waarschuwing [[title]]: [[message]] met [[buttons]] gedurende [[timeout]] seconden"
+        },
+        "args": [
+          {
+            "name": "title",
+            "title": {
+              "en": "Alert title",
+              "nl": "Waarschuwingstitel"
+            },
+            "type": "text",
+            "placeholder": {
+              "en": "Alert title",
+              "nl": "Melding titel"
+            },
+            "required": false
+          },
+          {
+            "name": "message",
+            "title": {
+              "en": "Alert text",
+              "nl": "Waarschuwingstekst"
+            },
+            "type": "text",
+            "placeholder": {
+              "en": "Alert text",
+              "nl": "Melding tekst"
+            }
+          },
+          {
+            "name": "buttons",
+            "title": {
+              "en": "Buttons as JSON",
+              "nl": "Knoppen als JSON"
+            },
+            "type": "text",
+            "required": false,
+            "placeholder": {
+              "en": "Optional JSON button array",
+              "nl": "Optionele JSON-array met knoppen"
+            }
+          },
+          {
+            "name": "timeout",
+            "title": {
+              "en": "Duration",
+              "nl": "Duur"
+            },
+            "type": "number",
+            "required": false,
+            "min": 1,
+            "max": 3600,
+            "step": 1,
+            "placeholder": {
+              "en": "Timeout in seconds",
+              "nl": "Timeout in seconden"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "send_toast",
+        "title": {
+          "en": "Show notification",
+          "nl": "Toon melding"
+        },
+        "titleFormatted": {
+          "en": "Show notification [[message]] with icon [[iconData]]",
+          "nl": "Toon melding [[message]] met pictogram [[iconData]]"
+        },
+        "args": [
+          {
+            "name": "message",
+            "title": {
+              "en": "Notification text",
+              "nl": "Meldingstekst"
+            },
+            "type": "text",
+            "placeholder": {
+              "en": "Notification text",
+              "nl": "Meldingstekst"
+            }
+          },
+          {
+            "name": "iconData",
+            "title": {
+              "en": "Optional icon",
+              "nl": "Optioneel pictogram"
+            },
+            "type": "text",
+            "required": false,
+            "placeholder": {
+              "en": "Optional image URL or Base64 data",
+              "nl": "Optionele afbeeldings-URL of Base64-gegevens"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "change_sound_output",
+        "title": {
+          "en": "Change sound output",
+          "nl": "Wijzig geluidsuitgang"
+        },
+        "titleFormatted": {
+          "en": "Change sound output to [[output]]",
+          "nl": "Wijzig geluidsuitgang naar [[output]]"
+        },
+        "args": [
+          {
+            "name": "output",
+            "title": {
+              "en": "Sound output",
+              "nl": "Geluidsuitgang"
+            },
+            "type": "dropdown",
+            "placeholder": {
+              "en": "Select an output",
+              "nl": "Selecteer een uitgang"
+            },
+            "values": [
+              {
+                "id": "tv_speaker",
+                "label": {
+                  "en": "TV speaker",
+                  "nl": "TV speaker"
+                }
+              },
+              {
+                "id": "external_speaker",
+                "label": {
+                  "en": "External speaker",
+                  "nl": "Externe speaker"
+                }
+              },
+              {
+                "id": "external_optical",
+                "label": {
+                  "en": "External optical",
+                  "nl": "Externe optische"
+                }
+              },
+              {
+                "id": "external_arc",
+                "label": {
+                  "en": "External ARC",
+                  "nl": "Externe ARC"
+                }
+              },
+              {
+                "id": "lineout",
+                "label": {
+                  "en": "Line out",
+                  "nl": "Line out"
+                }
+              },
+              {
+                "id": "headphone",
+                "label": {
+                  "en": "Headphone",
+                  "nl": "Koptelefoon"
+                }
+              },
+              {
+                "id": "tv_external_speaker",
+                "label": {
+                  "en": "TV external speaker",
+                  "nl": "TV externe speaker"
+                }
+              },
+              {
+                "id": "tv_speaker_headphone",
+                "label": {
+                  "en": "TV speaker headphone",
+                  "nl": "TV speaker koptelefoon"
+                }
+              },
+              {
+                "id": "bt_soundbar",
+                "label": {
+                  "en": "Bluetooth soundbar",
+                  "nl": "Bluetooth soundbar"
+                }
+              }
+            ]
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "change_channel_number",
+        "title": {
+          "en": "Change channel by number",
+          "nl": "Wijzig kanaal op nummer"
+        },
+        "titleFormatted": {
+          "en": "Change channel number to [[channel]]",
+          "nl": "Wijzig kanaalnummer naar [[channel]]"
+        },
+        "args": [
+          {
+            "name": "channel",
+            "title": {
+              "en": "Channel",
+              "nl": "Kanaal"
+            },
+            "type": "number",
+            "min": 0,
+            "step": 1
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "launch_app",
+        "title": {
+          "en": "Launch app",
+          "nl": "Open app"
+        },
+        "titleFormatted": {
+          "en": "Launch [[app]]",
+          "nl": "Open [[app]]"
+        },
+        "args": [
+          {
+            "name": "app",
+            "title": {
+              "en": "App or input",
+              "nl": "App of ingang"
+            },
+            "type": "autocomplete",
+            "placeholder": {
+              "en": "Turn on the TV to load choices",
+              "nl": "Zet de TV aan om keuzes te laden"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "change_channel_list",
+        "title": {
+          "en": "Change channel from list",
+          "nl": "Wijzig kanaal uit lijst"
+        },
+        "titleFormatted": {
+          "en": "Change channel from list to [[channel]]",
+          "nl": "Wijzig kanaal uit lijst naar [[channel]]"
+        },
+        "args": [
+          {
+            "name": "channel",
+            "title": {
+              "en": "Channel",
+              "nl": "Kanaal"
+            },
+            "type": "autocomplete",
+            "placeholder": {
+              "en": "Turn on the TV to load choices",
+              "nl": "Zet de TV aan om keuzes te laden"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "simulate_button",
+        "title": {
+          "en": "Simulate remote button",
+          "nl": "Simuleer afstandsbedieningsknop"
+        },
+        "titleFormatted": {
+          "en": "Simulate remote button [[button]]",
+          "nl": "Simuleer afstandsbedieningsknop [[button]]"
+        },
+        "args": [
+          {
+            "name": "button",
+            "title": {
+              "en": "Remote button",
+              "nl": "Afstandsbedieningsknop"
+            },
+            "type": "dropdown",
+            "placeholder": {
+              "en": "Turn on the TV to load choices",
+              "nl": "Zet de TV aan om keuzes te laden"
+            },
+            "values": [
+              {
+                "id": "LEFT",
+                "label": {
+                  "en": "Left",
+                  "nl": "Links"
+                }
+              },
+              {
+                "id": "RIGHT",
+                "label": {
+                  "en": "Right",
+                  "nl": "Rechts"
+                }
+              },
+              {
+                "id": "UP",
+                "label": {
+                  "en": "Up",
+                  "nl": "Omhoog"
+                }
+              },
+              {
+                "id": "DOWN",
+                "label": {
+                  "en": "Down",
+                  "nl": "Omlaag"
+                }
+              },
+              {
+                "id": "HOME",
+                "label": {
+                  "en": "Home",
+                  "nl": "Thuis"
+                }
+              },
+              {
+                "id": "BACK",
+                "label": {
+                  "en": "Back",
+                  "nl": "Terug"
+                }
+              },
+              {
+                "id": "DASH",
+                "label": {
+                  "en": "Dash",
+                  "nl": "Streepje"
+                }
+              },
+              {
+                "id": "Info",
+                "label": {
+                  "en": "Info",
+                  "nl": "Info"
+                }
+              },
+              {
+                "id": "ENTER",
+                "label": {
+                  "en": "Ok",
+                  "nl": "Ok"
+                }
+              },
+              {
+                "id": "MENU",
+                "label": {
+                  "en": "Menu",
+                  "nl": "Menu"
+                }
+              },
+              {
+                "id": "EXIT",
+                "label": {
+                  "en": "Exit",
+                  "nl": "Exit"
+                }
+              },
+              {
+                "id": "ASTERISK",
+                "label": {
+                  "en": "Rec/*",
+                  "nl": "Rec/*"
+                }
+              },
+              {
+                "id": "CC",
+                "label": {
+                  "en": "Subtitles",
+                  "nl": "Ondertiteling"
+                }
+              },
+              {
+                "id": "VOLUMEUP",
+                "label": {
+                  "en": "Volume up",
+                  "nl": "Volume omhoog"
+                }
+              },
+              {
+                "id": "VOLUMEDOWN",
+                "label": {
+                  "en": "Volume down",
+                  "nl": "Volume omlaag"
+                }
+              },
+              {
+                "id": "MUTE",
+                "label": {
+                  "en": "Mute",
+                  "nl": "Mute"
+                }
+              },
+              {
+                "id": "CHANNELUP",
+                "label": {
+                  "en": "Channel up",
+                  "nl": "Kanaal omhoog"
+                }
+              },
+              {
+                "id": "CHANNELDOWN",
+                "label": {
+                  "en": "Channel down",
+                  "nl": "Kanaal omlaag"
+                }
+              },
+              {
+                "id": "1",
+                "label": {
+                  "en": "1",
+                  "nl": "1"
+                }
+              },
+              {
+                "id": "2",
+                "label": {
+                  "en": "2",
+                  "nl": "2"
+                }
+              },
+              {
+                "id": "3",
+                "label": {
+                  "en": "3",
+                  "nl": "3"
+                }
+              },
+              {
+                "id": "4",
+                "label": {
+                  "en": "4",
+                  "nl": "4"
+                }
+              },
+              {
+                "id": "5",
+                "label": {
+                  "en": "5",
+                  "nl": "5"
+                }
+              },
+              {
+                "id": "6",
+                "label": {
+                  "en": "6",
+                  "nl": "6"
+                }
+              },
+              {
+                "id": "7",
+                "label": {
+                  "en": "7",
+                  "nl": "7"
+                }
+              },
+              {
+                "id": "8",
+                "label": {
+                  "en": "8",
+                  "nl": "8"
+                }
+              },
+              {
+                "id": "9",
+                "label": {
+                  "en": "9",
+                  "nl": "9"
+                }
+              },
+              {
+                "id": "0",
+                "label": {
+                  "en": "0",
+                  "nl": "0"
+                }
+              },
+              {
+                "id": "PLAY",
+                "label": {
+                  "en": "Play",
+                  "nl": "Play"
+                }
+              },
+              {
+                "id": "PAUSE",
+                "label": {
+                  "en": "Pause",
+                  "nl": "Pauzeren"
+                }
+              },
+              {
+                "id": "STOP",
+                "label": {
+                  "en": "Stop",
+                  "nl": "Stop"
+                }
+              },
+              {
+                "id": "REWIND",
+                "label": {
+                  "en": "Rewind",
+                  "nl": "Terugspoelen"
+                }
+              },
+              {
+                "id": "FASTFORWARD",
+                "label": {
+                  "en": "Fast forward",
+                  "nl": "Doorspoelen"
+                }
+              },
+              {
+                "id": "RED",
+                "label": {
+                  "en": "Red",
+                  "nl": "Rood"
+                }
+              },
+              {
+                "id": "GREEN",
+                "label": {
+                  "en": "Green",
+                  "nl": "Groen"
+                }
+              },
+              {
+                "id": "YELLOW",
+                "label": {
+                  "en": "Yellow",
+                  "nl": "Geel"
+                }
+              },
+              {
+                "id": "BLUE",
+                "label": {
+                  "en": "Blue",
+                  "nl": "Blauw"
+                }
+              }
+            ]
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "switch_input",
+        "title": {
+          "en": "Switch external input",
+          "nl": "Schakel externe ingang"
+        },
+        "titleFormatted": {
+          "en": "Switch to [[input]]",
+          "nl": "Schakel naar [[input]]"
+        },
+        "args": [
+          {
+            "name": "input",
+            "title": {
+              "en": "Input",
+              "nl": "Ingang"
+            },
+            "type": "autocomplete",
+            "placeholder": {
+              "en": "Turn on the TV to load choices",
+              "nl": "Zet de TV aan om keuzes te laden"
+            }
+          },
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_media_play",
+        "title": {
+          "en": "Play",
+          "nl": "Afspelen"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_media_pause",
+        "title": {
+          "en": "Pause",
+          "nl": "Pauzeren"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_media_toggle",
+        "title": {
+          "en": "Toggle Play/Pause command",
+          "nl": "Wissel afspelen/pauzeren-opdracht"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_media_fast_forward",
+        "title": {
+          "en": "Fast forward",
+          "nl": "Vooruitspoelen"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      },
+      {
+        "id": "webos_media_rewind",
+        "title": {
+          "en": "Rewind",
+          "nl": "Terugspoelen"
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ]
+      }
+    ]
+  },
+  "drivers": [
+    {
+      "id": "webos_plus",
+      "name": {
+        "en": "Local webOS TV Controller",
+        "nl": "Lokale webOS-tv-controller"
+      },
+      "class": "tv",
+      "platforms": [
+        "local"
+      ],
+      "connectivity": [
+        "lan"
+      ],
+      "discovery": "webos",
+      "pair": [
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_my_devices"
+          }
+        },
+        {
+          "id": "add_my_devices",
+          "template": "add_devices"
+        }
+      ],
+      "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "Advanced settings",
+            "nl": "Geavanceerde instellingen"
+          },
+          "children": [
+            {
+              "id": "powerStateTimeout",
+              "type": "number",
+              "label": {
+                "en": "Power-listener timeout",
+                "nl": "Time-out van powerlistener"
+              },
+              "hint": {
+                "en": "Time allowed for the WebSocket power listener to detect that the TV has turned off. Increase this only if remote-control power-off is not registered reliably. A value that is too short can make detection unreliable.",
+                "nl": "Tijd waarin de WebSocket-powerlistener kan detecteren dat de TV is uitgeschakeld. Verhoog dit alleen als uitschakelen met de afstandsbediening niet betrouwbaar wordt geregistreerd. Een te korte tijd kan de detectie onbetrouwbaar maken."
+              },
+              "value": 2000,
+              "min": 0,
+              "max": 60000,
+              "units": {
+                "en": "milliseconds",
+                "nl": "milliseconden"
+              }
+            },
+            {
+              "id": "usePoll",
+              "type": "checkbox",
+              "label": {
+                "en": "Use polling instead of power listener",
+                "nl": "Gebruik polling in plaats van de powerlistener"
+              },
+              "hint": {
+                "en": "Disable the power listener and periodically check whether the TV is on or off. Polling may work better when the power listener is unreliable for a television.",
+                "nl": "Schakel de powerlistener uit en controleer regelmatig of de TV aan of uit staat. Polling kan beter werken wanneer de powerlistener niet betrouwbaar is voor een televisie."
+              },
+              "value": false
+            },
+            {
+              "id": "pollInterval",
+              "type": "number",
+              "label": {
+                "en": "Polling interval",
+                "nl": "Pollinginterval"
+              },
+              "hint": {
+                "en": "Time between polling checks. Change this only if remote-control power changes are not detected reliably. A longer interval reduces check frequency.",
+                "nl": "Tijd tussen pollingcontroles. Wijzig dit alleen als aan-uitwijzigingen via de afstandsbediening niet betrouwbaar worden gedetecteerd. Een langer interval vermindert de controlefrequentie."
+              },
+              "value": 10,
+              "min": 5,
+              "max": 3600,
+              "units": {
+                "en": "seconds",
+                "nl": "seconden"
+              }
+            },
+            {
+              "id": "pollTimeout",
+              "type": "number",
+              "label": {
+                "en": "Polling timeout",
+                "nl": "Time-out voor polling"
+              },
+              "hint": {
+                "en": "Time after which a failed polling check treats the TV as off. Keep this shorter than the polling interval.",
+                "nl": "Tijd waarna een mislukte pollingcontrole de TV als uitgeschakeld beschouwt. Houd dit korter dan het pollinginterval."
+              },
+              "value": 8,
+              "min": 0,
+              "max": 3600,
+              "units": {
+                "en": "seconds",
+                "nl": "seconden"
+              }
+            },
+            {
+              "id": "manualIpAddress",
+              "type": "checkbox",
+              "label": {
+                "en": "Set IP address manually",
+                "nl": "IP-adres handmatig instellen"
+              },
+              "value": false
+            },
+            {
+              "id": "ipAddress",
+              "type": "text",
+              "label": {
+                "en": "TV IP address",
+                "nl": "IP-adres van de TV"
+              },
+              "value": "0.0.0.0"
+            }
+          ]
+        }
+      ],
+      "capabilities": [
+        "onoff",
+        "volume_set",
+        "channel_up",
+        "volume_up",
+        "channel_down",
+        "volume_down",
+        "volume_mute",
+        "webos_display.app",
+        "webos_display.channel"
+      ],
+      "capabilitiesOptions": {
+        "onoff": {
+          "uiQuickAction": true
+        },
+        "volume_set": {
+          "units": "%",
+          "min": 0,
+          "max": 1,
+          "step": 0.01,
+          "decimals": 2
+        },
+        "webos_display.app": {
+          "title": {
+            "en": "App or input",
+            "nl": "App of ingang"
+          },
+          "preventInsights": true,
+          "preventTag": true
+        },
+        "webos_display.channel": {
+          "title": {
+            "en": "Channel",
+            "nl": "Kanaal"
+          },
+          "preventInsights": true,
+          "preventTag": true
+        }
+      },
+      "images": {
+        "large": "/drivers/webos_plus/assets/images/large.png",
+        "small": "/drivers/webos_plus/assets/images/small.png",
+        "xlarge": "/drivers/webos_plus/assets/images/xlarge.png"
+      }
+    }
+  ]
+}

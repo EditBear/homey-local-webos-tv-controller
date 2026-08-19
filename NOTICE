@@ -1,0 +1,16 @@
+Local webOS TV Controller
+Copyright (C) 2026 John Bear
+
+This independently published community Homey application is derived from WebOS Plus by
+Max van de Laar. Original project copyright and contributor credit are retained.
+
+Original project: https://github.com/MaxvandeLaar/homey-webos-plus
+Original author: Max van de Laar
+Earlier credited developers: Dominic Vonk and Paul Molensky
+
+The included lgtv2 library is by Sebastian Raff and remains under its included
+MIT licence. The application as a whole is distributed under the GNU General
+Public License, version 3 or later, as provided in LICENSE.
+
+This is an independent community project. It is not affiliated with or endorsed
+by LG Electronics, Athom B.V. or the original WebOS Plus maintainer.
