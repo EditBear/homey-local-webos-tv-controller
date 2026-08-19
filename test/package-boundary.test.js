@@ -15,16 +15,20 @@ const rules = new Set(
 );
 
 assert(
-  !Object.prototype.hasOwnProperty.call(packageManifest.devDependencies || {}, 'npm'),
-  'npm must not be bundled as an application development dependency',
+  !Object.prototype.hasOwnProperty.call(packageManifest.dependencies || {}, 'npm'),
+  'npm must remain a development-only build tool, not a runtime dependency',
 );
 assert(
-  !Object.prototype.hasOwnProperty.call(packageLock.packages?.['']?.devDependencies || {}, 'npm'),
-  'The lockfile root must not declare npm as a development dependency',
+  packageManifest.devDependencies?.npm === '11.6.2',
+  'package.json must pin the approved project-local npm development dependency',
 );
 assert(
-  !Object.prototype.hasOwnProperty.call(packageLock.packages || {}, 'node_modules/npm'),
-  'The lockfile must not contain a bundled npm package subtree',
+  packageLock.packages?.['']?.devDependencies?.npm === '11.6.2',
+  'The lockfile root must preserve the approved npm development dependency',
+);
+assert(
+  packageLock.packages?.['node_modules/npm']?.version === '11.6.2',
+  'The lockfile must resolve the approved project-local npm version',
 );
 
 const requiredRules = [

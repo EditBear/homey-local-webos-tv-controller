@@ -55,12 +55,12 @@ licensing details.
 
 ## Build, test and local installation
 
-Install Node.js 18 or newer and the project dependencies, then run:
+Install Node.js 20.17 or newer and the locked project dependencies, then run:
 
 ```sh
-npm install
+npm ci
 npm test
-npx homey app build
+./scripts/homey-local app build
 ```
 
 To install the app persistently on a compatible Homey Pro without using the
@@ -68,7 +68,7 @@ Homey App Store, authenticate and select the Homey through the Homey CLI, then
 run:
 
 ```sh
-npx homey app install
+./scripts/homey-local app install
 ```
 
 See `RECOVERY.md` for the preservation boundaries and recovery procedure.

@@ -7,19 +7,19 @@ Controller. Release `v1.0.43` corresponds to the published Homey app version
 ## Requirements
 
 - a compatible Homey Pro and Homey account;
-- Node.js 18 or newer;
+- Node.js 20.17 or newer;
 - npm and internet access when dependencies are not already available;
 - the Homey CLI supplied through this project's development dependencies.
 
 ## Restore from source
 
 ```sh
-npm install
+npm ci
 npm test
-npx homey app build
-npx homey login
-npx homey select
-npx homey app install
+./scripts/homey-local app build
+./scripts/homey-local login
+./scripts/homey-local select
+./scripts/homey-local app install
 ```
 
 `homey app install` installs the application persistently without requiring the

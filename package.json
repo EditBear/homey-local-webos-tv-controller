@@ -7,8 +7,9 @@
   "scripts": {
     "validate": "homey app validate",
     "test": "node test/volume.test.js && node test/audio-flow.test.js && node test/display-capabilities.test.js && node test/artwork-removal.test.js && node test/connection.test.js && node test/startup-order.test.js && node test/subscription-state.test.js && node test/channel-reliability.test.js && node test/channel-observation.test.js && node test/launch-apps.test.js && node test/action.test.js && node test/driver-initialisation.test.js && node test/manifest-presentation.test.js && node test/submission-identity.test.js && node test/manifest-schema-boundaries.test.js && node test/manifest-runtime-consistency.test.js && node test/locale-parity.test.js && node test/pairing-key.test.js && node test/source-safety.test.js && node test/bounds.test.js && node test/settings.test.js && node test/lifecycle.test.js && node test/discovery.test.js && node test/package-boundary.test.js && node test/power-state.test.js && node test/pairing-payload.test.js && node test/request-state.test.js && node test/reconnect-state.test.js && node test/specialized-socket.test.js && node test/managed-timeouts.test.js",
-    "run:remote": "homey app run --remote",
-    "install:homey": "homey app install"
+    "homey": "./scripts/homey-local",
+    "run:remote": "./scripts/homey-local app run --remote",
+    "install:homey": "./scripts/homey-local app install"
   },
   "author": "John Bear",
   "license": "GPL-3.0-or-later",
@@ -18,6 +19,10 @@
     "websocket": "^1.0.30"
   },
   "devDependencies": {
-    "homey": "^4.4.0"
+    "homey": "^4.4.0",
+    "npm": "11.6.2"
+  },
+  "engines": {
+    "node": ">=20.17"
   }
 }

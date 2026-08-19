@@ -1,0 +1,24 @@
+#!/bin/sh
+set -eu
+
+PROJECT_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "Node.js 20.17 or newer is required. Install Node.js, then run npm ci." >&2
+  exit 1
+fi
+
+if [ ! -x "$PROJECT_ROOT/node_modules/.bin/npm" ]; then
+  echo "Local npm is missing. Run npm ci in the project root." >&2
+  exit 1
+fi
+
+if [ ! -x "$PROJECT_ROOT/node_modules/.bin/homey" ]; then
+  echo "Local Homey CLI is missing. Run npm ci in the project root." >&2
+  exit 1
+fi
+
+PATH="$PROJECT_ROOT/node_modules/.bin:$PATH"
+export PATH
+
+exec "$PROJECT_ROOT/node_modules/.bin/homey" "$@"
