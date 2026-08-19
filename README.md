@@ -6,9 +6,11 @@ network and concentrates on detailed television control and automation.
 
 ## Maintenance status
 
-I published this app to help other Homey users, but I am not a programmer and
-cannot promise continuing code maintenance. Developers are warmly invited to
-improve it, submit pull requests, fork it, or volunteer to maintain it.
+John Bear is not a programmer and cannot promise continuing maintenance.
+Contributions and offers to maintain the app are welcome. If a suitable
+maintainer wishes to take responsibility, John is willing to cooperate with
+Athom on an orderly transfer, preserving the existing app identity and
+protecting current users wherever possible. See `MAINTAINERSHIP.md`.
 
 The GPL-3.0-or-later licence permits reuse and modification under its terms.
 Repository access does not transfer the existing Homey App Store listing, and
