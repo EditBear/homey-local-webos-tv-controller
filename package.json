@@ -1,28 +1,32 @@
 {
   "name": "com.rompa.webos-plus-g4",
-  "version": "1.0.43",
-  "private": true,
-  "description": "Local Homey control for compatible LG webOS televisions",
+  "version": "2.0.0",
+  "description": "Local LG webOS TV control and Flow integration for Homey",
   "main": "app.js",
-  "scripts": {
-    "validate": "homey app validate",
-    "test": "node test/volume.test.js && node test/audio-flow.test.js && node test/display-capabilities.test.js && node test/artwork-removal.test.js && node test/connection.test.js && node test/startup-order.test.js && node test/subscription-state.test.js && node test/channel-reliability.test.js && node test/channel-observation.test.js && node test/launch-apps.test.js && node test/action.test.js && node test/driver-initialisation.test.js && node test/manifest-presentation.test.js && node test/submission-identity.test.js && node test/manifest-schema-boundaries.test.js && node test/manifest-runtime-consistency.test.js && node test/locale-parity.test.js && node test/pairing-key.test.js && node test/source-safety.test.js && node test/bounds.test.js && node test/settings.test.js && node test/lifecycle.test.js && node test/discovery.test.js && node test/package-boundary.test.js && node test/power-state.test.js && node test/pairing-payload.test.js && node test/request-state.test.js && node test/reconnect-state.test.js && node test/specialized-socket.test.js && node test/managed-timeouts.test.js",
-    "homey": "./scripts/homey-local",
-    "run:remote": "./scripts/homey-local app run --remote",
-    "install:homey": "./scripts/homey-local app install"
-  },
   "author": "John Bear",
   "license": "GPL-3.0-or-later",
   "dependencies": {
     "jimp-compact": "^0.9.8",
+    "node-fetch": "^2.6.0",
     "node-wol": "^0.1.1",
-    "websocket": "^1.0.30"
+    "lgtv2": "2.1.0",
+    "ws": "8.22.2"
   },
   "devDependencies": {
-    "homey": "^4.4.0",
-    "npm": "11.19.0"
+    "clean-webpack-plugin": "^3.0.0",
+    "copy-webpack-plugin": "^5.1.1",
+    "homey": "^2.3.1",
+    "optimize-css-assets-webpack-plugin": "^5.0.3",
+    "webpack": "^4.42.1",
+    "webpack-cli": "^3.3.11",
+    "webpack-obfuscator": "^0.27.2",
+    "webpack-shell-plugin": "^0.5.0",
+    "@tsconfig/node12": "^1.0.11",
+    "@types/homey": "npm:homey-apps-sdk-v3-types@^0.3.4",
+    "@types/node": "^18.15.3"
   },
+  "private": true,
   "engines": {
-    "node": ">=20.17"
+    "node": "^22.12.0 || >=24"
   }
 }

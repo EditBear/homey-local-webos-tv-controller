@@ -10,8 +10,9 @@ control or Flow card involved.
 
 Pull requests should be focused on one issue, retain upstream attribution and
 the GPL-3.0-or-later licence, preserve existing device and Flow identifiers,
-and include regression coverage. Run the complete test command and both Homey
-publish and verified validation levels before requesting review.
+and include regression coverage. Run the offline tests and Homey Publish
+validation from the [build instructions](README.md#build-and-test) before
+requesting review.
 
 Do not include LG pairing keys, Homey credentials, private IP addresses,
 diagnostic archives containing personal information or copyrighted media.

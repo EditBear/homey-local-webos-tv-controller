@@ -96,15 +96,18 @@ const capabilities = {
   volumeDown: 'volume_down',
   channelUp: 'channel_up',
   channelDown: 'channel_down',
-  displayApp: 'webos_display.app',
-  displayChannel: 'webos_display.channel',
+  speakerAlbum: 'speaker_album',
+  speakerArtist: 'speaker_artist',
+  speakerTrack: 'speaker_track',
+  speakerPlaying: 'speaker_playing',
+  speakerNext: 'speaker_next',
+  speakerPrev: 'speaker_prev',
 }
 
 const store = {
   currentApp: 'currentApp',
   currentSoundOutput: 'currentSoundOutput',
   currentChannel: 'currentChannel',
-  pairingKey: 'pairingKey',
 }
 
 const actions = {

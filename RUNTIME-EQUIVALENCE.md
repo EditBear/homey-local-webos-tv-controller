@@ -1,6 +1,6 @@
-# Runtime-equivalence record
+# Runtime-equivalence record for 1.0.43
 
-The maintenance source on `main` uses project-local npm 11.19.0 instead of
+The 1.0.43 tooling revision used project-local npm 11.19.0 instead of
 11.6.2. This is a computer-side build-tool update; it does not change the
 television-controller implementation.
 

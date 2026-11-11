@@ -18,20 +18,11 @@
 
 const Homey = require('homey')
 const {endpoints} = require('./utils/constants')
+const {readLgVolume} = require('./utils/numeric-volume')
 const wol = require('node-wol')
 const Jimp = require('jimp-compact')
-const {createPairingKeyConfig} = require('./utils/pairing-key')
-const {
-  assertBase64ImageSize,
-  parseAlertButtons,
-  normaliseAlertTimeout,
-} = require('./utils/bounds')
-const {
-  classifyPowerState,
-  normalisePowerStateTimeout,
-} = require('./utils/power-state')
-const ManagedTimeouts = require('./utils/managed-timeouts')
-const {extractLgVolumeStatus} = require('./utils/volume')
+
+const CLIENT_KEY_STORE_KEY = 'pairingKey'
 
 class WebOSTV extends Homey.Device {
 
@@ -41,22 +32,42 @@ class WebOSTV extends Homey.Device {
   construct() {
     this.lgtv = null
     this.subsSet = false
-    this.simulateButtonSock = null
-    this.simulateButtonSockTimeout = null
-    this.alertCloseTimeouts = new ManagedTimeouts()
+    this.simulateButtonConnection = null
+    this.simulateButtonConnecting = null
+    this._playPauseState = null
   }
 
   /**
    * Connect to the LG WebOS TV
    */
   _connect() {
+    this._playPauseState = null
     this.setAvailable()
     this.log(`_connect: Connect to TV wss://${ this.getSettings().ipAddress }:3001`)
 
-    this.lgtv = require('../lgtv2/lgtv2')({
-      url: `wss://${ this.getSettings().ipAddress }:3001`,
-      ...createPairingKeyConfig(this),
+    const storedClientKey = this.getStoreValue(CLIENT_KEY_STORE_KEY)
+    const clientKey = typeof storedClientKey === 'string' && storedClientKey.length > 0
+      ? storedClientKey
+      : null
+
+    let client
+    const saveKey = (key, callback) => {
+      client.clientKey = key
+
+      Promise.resolve()
+        .then(() => this.setStoreValue(CLIENT_KEY_STORE_KEY, key))
+        .then(
+          () => callback(null),
+          error => callback(error),
+        )
+    }
+
+    client = require('../lgtv2/lgtv2')({
+      host: this.getSettings().ipAddress,
+      clientKey,
+      saveKey,
     })
+    this.lgtv = client
 
     this.lgtv.on('prompt', () => {
       this.log('_connect: [prompt] Please authorize on TV')
@@ -64,6 +75,7 @@ class WebOSTV extends Homey.Device {
     })
 
     this.lgtv.on('close', () => {
+      if (this.lgtv === client) this._playPauseState = null
       this.log('_connect: [close] Disconnected')
     })
 
@@ -122,22 +134,35 @@ class WebOSTV extends Homey.Device {
    */
   _handleResponse(err, res, endpoint) {
     this.log(`_handleResponse: ${ endpoint }`)
-    const responseError = err || !res || res.returnValue === false || res.errorText || res.errorCode
-    if (responseError) {
-      this.error('_handleResponse error:', endpoint, err || res)
+    let responseError = null
+
+    if (err) {
+      responseError = err instanceof Error
+        ? err
+        : new Error(err && err.message ? String(err.message) : String(err))
+      if (err && typeof err.code !== 'undefined' && typeof responseError.code === 'undefined') {
+        responseError.code = err.code
+      }
+    } else if (!res || typeof res !== 'object' || Array.isArray(res)) {
+      responseError = new Error(`LG response for ${ endpoint } did not contain an object payload`)
+      responseError.isLGResponseFailure = true
+    } else if (res.returnValue === false || (typeof res.errorText === 'string' && res.errorText.length > 0)) {
+      responseError = new Error(res.errorText || `LG response for ${ endpoint } reported failure`)
+      responseError.isLGResponseFailure = true
+      if (typeof res.errorCode !== 'undefined') {
+        responseError.code = res.errorCode
+        responseError.lgErrorCode = res.errorCode
+      }
     }
-    if (!responseError) {
-      return {
-        error: null,
-        result: res,
-        endpoint,
-      }
-    } else {
-      return {
-        error: err || (res && (res.errorText || res.errorCode)) || new Error('Invalid WebOS response'),
-        result: res,
-        endpoint,
-      }
+
+    if (responseError) {
+      this.error('_handleResponse error:', endpoint, responseError)
+    }
+
+    return {
+      error: responseError,
+      result: res,
+      endpoint,
     }
   }
 
@@ -150,12 +175,18 @@ class WebOSTV extends Homey.Device {
   _powerStateListener(handleOn, handleOff) {
     this.log(`_powerStateListener: Start listening for changes in power state`)
     let timer = null
-    let powerState = null
+    let processing = null
+    let status = null
+    let statusPowerOnReason = null
     this.lgtv.subscribe(endpoints.powerState, (err, res) => {
       const {
         error,
         result,
       } = this._handleResponse(err, res, endpoints.powerState)
+      if (error && error.isLGResponseFailure) {
+        this.error(error)
+        return
+      }
       if (timer) {
         this.log(`_powerStateListener: Reset timer`)
         clearTimeout(timer)
@@ -164,37 +195,38 @@ class WebOSTV extends Homey.Device {
       this.log('_powerStateListener: Power state changed', result)
       if (error) {
         this.error(error)
-        // A subscription error is not proof that the television is off.
-        // Preserve the last known state; connection close or polling owns
-        // unreachable/off detection.
+        handleOff()
         return
       }
       if (!this.subsSet) {
         this.subsSet = true
       }
 
-      powerState = classifyPowerState(result)
-      const timeout = normalisePowerStateTimeout(this.getSettings().powerStateTimeout)
+      status = result.state ? result.state.toLowerCase() : ''
+      processing = result.processing ? result.processing.toLowerCase() : null
+      statusPowerOnReason = (res && res.powerOnReason ? res.powerOnReason : null)
 
-      this.log(`_powerStateListener: Set timeout to ${ timeout } ms and check the state`)
+      this.log(`_powerStateListener: ${ timer ? 'Reset' : 'Set' } timeout to ${ this.getSettings().powerStateTimeout || 2000 } ms and check the state`)
       timer = setTimeout(() => {
-        this.log(`_powerStateListener: Called timeout`, powerState)
-        if (powerState === true) {
+        this.log(`_powerStateListener: Called timeout`, status, processing)
+
+        //Screen saver(?) should tv be turned on?
+        if (((status === 'active' || status === 'screen saver' || status === 'screen off') && !processing) || (processing && (processing.includes('on') || processing.includes('ready') || processing.includes('resume') || processing.includes('saver')))) {
           handleOn()
-        } else if (powerState === false) {
+        } else if ((!processing && status !== 'active' && status !== 'screen off') || (processing && (processing.includes('standby') || processing.includes('suspend') || processing.includes('off')))) {
           handleOff()
         }
 
         clearTimeout(timer)
         timer = null
-      }, timeout)
+      }, this.getSettings().powerStateTimeout || 2000)
     })
   }
 
   /**
    * A listener (subscription) on volume changes
    *
-   * @param {Function} handleChange Callback when volume changed
+   * @param {Function} handleChange Callback (validated LG volume, optional original power report)
    * @param {Function} handleMute Callback when mute changed
    */
   _volumeListener(handleChange, handleMute) {
@@ -213,40 +245,19 @@ class WebOSTV extends Homey.Device {
         this.subsSet = true
       }
 
-      const status = extractLgVolumeStatus(result)
-
-      if (status.volume !== undefined) {
-        this.log(`_volumeListener: Volume changed to ${ status.volume }`)
-        handleChange(status.volume)
+      const volume = readLgVolume(result)
+      if (result.changed && result.changed.indexOf('volume') !== -1) {
+        this.log(`_volumeListener: Volume changed to ${ result.volume }`)
+        handleChange(volume, { value: result.volume })
+      } else {
+        // Initial and nested reports were missed by the changed-marker reader.
+        // These newly consumed reports must not add ON/OFF transitions.
+        if (volume !== null) handleChange(volume)
       }
-      if (status.muted !== undefined) {
-        this.log(`_volumeListener: Mute changed to ${ status.muted }`)
-        handleMute(status.muted)
+      if (result.changed && result.changed.indexOf('muted') !== -1) {
+        this.log(`_volumeListener: Mute changed to ${ result.muted }`)
+        handleMute(result.muted)
       }
-    })
-  }
-
-  /**
-   * Read the television's current volume and mute status.
-   *
-   * @returns {Promise<*>}
-   */
-  _volumeCurrent() {
-    this.log(`_volumeCurrent: Send request to get the current volume`)
-    return new Promise((resolve, reject) => {
-      this.lgtv.request(endpoints.volume.get, (err, res) => {
-        const {
-          error,
-          result,
-          endpoint,
-        } = this._handleResponse(err, res, endpoints.volume.get)
-        if (error) {
-          this.error(`_volumeCurrent: ${ endpoint } with result:`, result)
-          return reject(error)
-        }
-        this.log(`_volumeCurrent: Success getting volume status`)
-        return resolve(result)
-      })
     })
   }
 
@@ -304,11 +315,20 @@ class WebOSTV extends Homey.Device {
    * A listener (subscription) on channel changes
    *
    * @param {Function} handleChange Callback when changed
-   * @param {Function} handleError Callback when the subscription fails
    */
-  _channelListener(handleChange, handleError) {
+  _channelListener(handleChange, handleError, client = this.lgtv) {
     this.log(`_channelListener: Start listening for changes in channel`)
-    this.lgtv.subscribe(endpoints.channel.current, (err, res) => {
+    return client.subscribeWithCancel(endpoints.channel.current, (err, res) => {
+      const channelUnavailable = err
+        ? err.isLGResponseFailure === true && err.message === '500 Application error'
+        : res?.errorText === '500 Application error'
+      if (channelUnavailable) {
+        // LG can lose the tuner before publishing the new foreground source.
+        this.log('_channelListener: Current channel unavailable (LG 500)')
+        handleChange(null)
+        return
+      }
+
       const {
         error,
         result,
@@ -316,9 +336,7 @@ class WebOSTV extends Homey.Device {
       } = this._handleResponse(err, res, endpoints.channel.current)
       if (error) {
         this.error(`_channelListener: ${ endpoint } with result:`, result)
-        if (typeof handleError === 'function') {
-          handleError(error)
-        }
+        if (handleError) handleError(error)
         return
       }
       if (!this.subsSet) {
@@ -564,16 +582,26 @@ class WebOSTV extends Homey.Device {
           return reject(error)
         }
         this.log(`_channelList: Retrieved all channels successfully`)
-        const channels = result.channelList.map(channel => {
-          return {
-            name: channel.channelName,
-            description: channel.channelNumber,
-            number: channel.channelNumber,
-            search: `${ channel.channelNumber } ${ channel.channelName }`,
-          }
-        })
-        this.log(`_channelList: Mapped all channels and resolve`)
-        resolve(channels)
+        if (!Array.isArray(result.channelList)) {
+          const schemaError = new TypeError('_channelList: LG response channelList is not an array')
+          this.error(schemaError)
+          return reject(schemaError)
+        }
+        try {
+          const channels = result.channelList.map(channel => {
+            return {
+              name: channel.channelName,
+              description: channel.channelNumber,
+              number: channel.channelNumber,
+              search: `${ channel.channelNumber } ${ channel.channelName }`,
+            }
+          })
+          this.log(`_channelList: Mapped all channels and resolve`)
+          return resolve(channels)
+        } catch (mappingError) {
+          this.error('_channelList: Failed to map LG channelList', mappingError)
+          return reject(mappingError)
+        }
       })
     })
   }
@@ -595,10 +623,10 @@ class WebOSTV extends Homey.Device {
         } = this._handleResponse(err, res, endpoints.channel.set)
         if (error) {
           this.error(`_channelSet: ${ endpoint } with result:`, result)
-          if (error && typeof error === 'object') {
-            error.webosResult = result
-          }
-          return reject(error)
+          return reject({
+            error,
+            result,
+          })
         }
         this.log(`_channelSet: Set channel successfully to ${ channelNumber }`)
         return resolve({
@@ -613,55 +641,82 @@ class WebOSTV extends Homey.Device {
    * Simulate a button press
    *
    * @param {string} button
-   * @returns {Promise<boolean>} Returns true if success
+   * @returns {Promise<void>} Completes on local write, not TV acknowledgement
    */
   async _simulateButton(button) {
     this.log(`_simulateButton: Send request to simulate button '${ button }'`)
-    if (this.simulateButtonSockTimeout) {
-      clearTimeout(this.simulateButtonSockTimeout)
-      this.simulateButtonSockTimeout = null
+    const client = this.lgtv
+    let connection = this.simulateButtonConnection
+    if (connection && (connection.client !== client || !connection.socket.isOpen())) {
+      this._disposeButtonConnection(connection)
+      connection = null
     }
-    if (this.simulateButtonSock && this.simulateButtonSock.isOpen === false) {
-      this.simulateButtonSock = null
-    }
-    if (!this.simulateButtonSock) {
-      this.simulateButtonSock = await new Promise((resolve, reject) => {
-        this.lgtv.getSocket(endpoints.inputSocket, (err, sock) => {
-          if (err) {
-            this.error('_simulateButton', err)
-            return reject(err)
-          }
-          this.log('_simulateButton: Opened simulated button sock')
-          return resolve(sock)
-        })
-      })
-    }
-    const socket = this.simulateButtonSock
-    try {
-      socket.send('button', {name: button.toUpperCase()})
-    } catch (error) {
-      if (this.simulateButtonSock === socket) {
-        this.simulateButtonSock = null
-      }
-      socket.close()
-      throw error
-    }
-    this.log(`_simulateButton: Successfully simulated button '${ button }'`)
-    if (this.simulateButtonSockTimeout) {
-      clearTimeout(this.simulateButtonSockTimeout)
-    }
-    const closeTimeout = setTimeout(() => {
-      socket.close()
-      if (this.simulateButtonSock === socket) {
-        this.simulateButtonSock = null
-      }
-      if (this.simulateButtonSockTimeout === closeTimeout) {
-        this.simulateButtonSockTimeout = null
-      }
-      this.log('_simulateButton: Closed simulated button sock')
 
-    }, 10000)
-    this.simulateButtonSockTimeout = closeTimeout
+    if (!connection) {
+      let pending = this.simulateButtonConnecting
+      if (!pending || pending.client !== client) {
+        pending = {client}
+        this.simulateButtonConnecting = pending
+        pending.promise = new Promise((resolve, reject) => {
+          client.getSocket(endpoints.inputSocket, (error, socket) => {
+            if (error) return reject(error)
+            resolve(socket)
+          })
+        }).then(socket => {
+          const opened = {client, socket, timer: null, writes: 0, disposed: false}
+          if (this.lgtv !== client || this.simulateButtonConnecting !== pending || !socket.isOpen()) {
+            this._disposeButtonConnection(opened)
+            throw new Error('Button connection changed or closed during setup')
+          }
+          this.simulateButtonConnection = opened
+          socket.once('close', () => this._disposeButtonConnection(opened))
+          return opened
+        }).finally(() => {
+          if (this.simulateButtonConnecting === pending) this.simulateButtonConnecting = null
+        })
+      }
+      connection = await pending.promise
+    }
+
+    connection.writes++
+    clearTimeout(connection.timer)
+    connection.timer = null
+    try {
+      if (connection.disposed || this.lgtv !== client) {
+        throw new Error('Button connection changed or closed before sending')
+      }
+      await connection.socket.send('button', {name: button.toUpperCase()})
+      if (connection.disposed || this.lgtv !== client) {
+        throw new Error('Button connection changed or closed while sending')
+      }
+      this.log(`_simulateButton: Sent button '${ button }'`)
+    } catch (error) {
+      this._disposeButtonConnection(connection)
+      throw error
+    } finally {
+      connection.writes--
+      if (!connection.disposed && connection.writes === 0) {
+        const timer = setTimeout(() => {
+          if (connection.timer !== timer) return
+          connection.timer = null
+          this._disposeButtonConnection(connection)
+        }, 10000)
+        connection.timer = timer
+      }
+    }
+  }
+
+  _disposeButtonConnection(connection) {
+    if (!connection || connection.disposed) return
+    connection.disposed = true
+    clearTimeout(connection.timer)
+    connection.timer = null
+    if (this.simulateButtonConnection === connection) this.simulateButtonConnection = null
+    try {
+      connection.socket.close()
+    } catch (error) {
+      this.error('_simulateButton: close failed', error)
+    }
   }
 
   /**
@@ -672,7 +727,7 @@ class WebOSTV extends Homey.Device {
    */
   _appLaunch(appId) {
     this.log(`_appLaunch: Send request to launch app/input '${ appId }'`)
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       this.lgtv.request(endpoints.app.launch, {id: appId}, (err, res) => {
         const {
           endpoint,
@@ -709,16 +764,26 @@ class WebOSTV extends Homey.Device {
         }
 
         this.log(`_appListLaunchPoints: Retrieved all launch points successfully`)
-        const apps = result.launchPoints.map(point => {
-          return {
-            name: point.title,
-            image: point.icon,
-            id: point.id,
-            imageLarge: point.largeIcon,
-          }
-        })
-        this.log(`_appListLaunchPoints: Mapped all launchp oints and resolve`)
-        return resolve(apps)
+        if (!Array.isArray(result.launchPoints)) {
+          const schemaError = new TypeError('_appListLaunchPoints: LG response launchPoints is not an array')
+          this.error(schemaError)
+          return reject(schemaError)
+        }
+        try {
+          const apps = result.launchPoints.map(point => {
+            return {
+              name: point.title,
+              image: point.icon,
+              id: point.id,
+              imageLarge: point.largeIcon,
+            }
+          })
+          this.log(`_appListLaunchPoints: Mapped all launchp oints and resolve`)
+          return resolve(apps)
+        } catch (mappingError) {
+          this.error('_appListLaunchPoints: Failed to map LG launchPoints', mappingError)
+          return reject(mappingError)
+        }
       })
     })
   }
@@ -731,23 +796,33 @@ class WebOSTV extends Homey.Device {
           endpoint,
           error,
           result,
-        } = this._handleResponse(err, res, endpoints.app.list)
+        } = this._handleResponse(err, res, endpoints.app.getAll)
         if (error) {
           this.error(`_appList: ${ endpoint } with result:`, result)
           return reject(error)
         }
 
         this.log(`_appList: Retrieved all apps successfully`)
-        const apps = result.apps.map(point => {
-          return {
-            name: point.title,
-            image: point.miniicon,
-            id: point.id,
-            imageLarge: point.icon,
-          }
-        })
-        this.log(`_appList: Mapped all apps and resolve`)
-        return resolve(apps)
+        if (!Array.isArray(result.apps)) {
+          const schemaError = new TypeError('_appList: LG response apps is not an array')
+          this.error(schemaError)
+          return reject(schemaError)
+        }
+        try {
+          const apps = result.apps.map(point => {
+            return {
+              name: point.title,
+              image: point.miniicon,
+              id: point.id,
+              imageLarge: point.icon,
+            }
+          })
+          this.log(`_appList: Mapped all apps and resolve`)
+          return resolve(apps)
+        } catch (mappingError) {
+          this.error('_appList: Failed to map LG apps', mappingError)
+          return reject(mappingError)
+        }
       })
     })
   }
@@ -757,10 +832,11 @@ class WebOSTV extends Homey.Device {
    *
    * @returns {Promise<*>}
    */
-  _appCurrent() {
+  _appCurrent({withReportTime = false} = {}) {
     this.log(`_appCurrent: Send request to get current app/input`)
     return new Promise((resolve, reject) => {
       this.lgtv.request(endpoints.app.getForegroundApp, (err, res) => {
+        const reportedAt = withReportTime ? Date.now() : undefined
         const {
           endpoint,
           error,
@@ -771,8 +847,100 @@ class WebOSTV extends Homey.Device {
           return reject(error)
         }
         this.log(`_appCurrent: Successfully retrieved current app/input`)
-        return resolve(result)
+        return resolve(withReportTime ? {result, reportedAt} : result)
       })
+    })
+  }
+
+  async _sendLegacyPlaybackToggle() {
+    if (this._playPauseState?.pending) {
+      throw new Error('A Play or Pause command is still pending')
+    }
+    const endpoint = this._playPauseState?.last === endpoints.media.play
+      ? endpoints.media.pause
+      : endpoints.media.play
+    return this._sendPlaybackCommand(endpoint)
+  }
+
+  _sendPlaybackCommand(endpoint) {
+    if (endpoint === endpoints.media.play || endpoint === endpoints.media.pause) {
+      return this._trackPlayPause(endpoint, () => this._requestPlayback(endpoint))
+    }
+    return this._requestPlayback(endpoint)
+  }
+
+  async _trackPlayPause(endpoint, send, acknowledged = result => result === true) {
+    // This is Homey command history for the deprecated card, not player state.
+    const state = this._playPauseState ??= {pending: 0, overlap: false, last: undefined}
+    if (state.pending) {
+      state.overlap = true
+      state.last = undefined
+    }
+    state.pending += 1
+    try {
+      const result = await send()
+      if (!state.overlap) state.last = acknowledged(result) ? endpoint : undefined
+      return result
+    } catch (error) {
+      if (error?.playbackRejected !== true) state.last = undefined
+      throw error
+    } finally {
+      state.pending -= 1
+      if (state.pending === 0) state.overlap = false
+    }
+  }
+
+  _requestPlayback(endpoint) {
+    return new Promise((resolve, reject) => {
+      const client = this.lgtv
+      if (!client) return reject(new Error('TV is not connected'))
+
+      // The LG client clears pending callbacks when the connection closes.
+      const disconnected = () => finish(new Error('TV disconnected before acknowledging the playback command'))
+      const finish = error => {
+        client.removeListener('close', disconnected)
+        if (error) reject(error)
+        else resolve(true)
+      }
+      client.once('close', disconnected)
+
+      try {
+        client.requestPlayback(endpoint, (error, payload, reply) => {
+          if (error) return finish(error)
+          if (this.lgtv !== client) return disconnected()
+
+          const parts = [reply, payload].filter(part => part && typeof part === 'object' && !Array.isArray(part))
+          const messages = new Set()
+          let code
+          let rejected = false
+          for (const part of parts) {
+            for (const value of [part.error, part.errorText]) {
+              if (typeof value === 'string' && value.trim()) messages.add(value.trim())
+            }
+            const candidate = part.errorCode ?? (part.type === 'error' ? part.code : undefined)
+            if ((Number.isFinite(candidate) && candidate !== 0)
+              || (typeof candidate === 'string' && candidate.trim() && candidate.trim() !== '0')) {
+              code ??= candidate
+            }
+            if (part.type === 'error' || part.returnValue === false || part.error || part.errorText) {
+              rejected = true
+            }
+          }
+
+          rejected ||= code !== undefined
+          if (!rejected && reply?.type === 'response' && payload?.returnValue === true) return finish()
+
+          const detail = [...messages].join(' — ') || (rejected
+            ? 'TV rejected the playback command'
+            : 'TV did not acknowledge the playback command')
+          const failure = new Error(code === undefined ? detail : `${detail} (LG code ${code})`)
+          failure.playbackRejected = rejected
+          if (code !== undefined) failure.code = code
+          return finish(failure)
+        })
+      } catch (error) {
+        finish(error)
+      }
     })
   }
 
@@ -785,7 +953,7 @@ class WebOSTV extends Homey.Device {
   _mediaTogglePlayPause(value) {
     this.log(`_mediaTogglePlayPause: Send request to play/pause`)
     const url = value ? endpoints.media.play : endpoints.media.pause
-    return new Promise((resolve, reject) => {
+    const send = () => new Promise((resolve, reject) => {
       this.lgtv.request(url, (err, res) => {
         const {
           endpoint,
@@ -800,15 +968,18 @@ class WebOSTV extends Homey.Device {
         return resolve(result)
       })
     })
+    return this._trackPlayPause(url, send, result =>
+      result?.returnValue === true && !result.error && !result.errorText
+        && (result.errorCode == null || result.errorCode === 0 || result.errorCode === '0'))
   }
 
   /**
-   * Fast forward media
+   * Media next
    *
    * @returns {Promise<*>} Promise object represents the API response
    */
-  mediaFastForward() {
-    this.log(`mediaFastForward: Send request to fastForward`)
+  _mediaNext() {
+    this.log(`_mediaNext: Send request to fastForward`)
     return new Promise((resolve, reject) => {
       this.lgtv.request(endpoints.media.fastForward, (err, res) => {
         const {
@@ -817,22 +988,22 @@ class WebOSTV extends Homey.Device {
           result,
         } = this._handleResponse(err, res, endpoints.media.fastForward)
         if (error) {
-          this.error(`mediaFastForward: ${ endpoint } with result:`, result)
+          this.error(`_mediaNext: ${ endpoint } with result:`, result)
           return reject(error)
         }
-        this.log(`mediaFastForward: Successfully fastForward`)
+        this.log(`_mediaNext: Successfully fastForward`)
         return resolve(result)
       })
     })
   }
 
   /**
-   * Rewind media
+   * Media previous
    *
    * @returns {Promise<*>} Promise object represents the API response
    */
-  mediaRewind() {
-    this.log(`mediaRewind: Send request to rewind`)
+  _mediaPrev() {
+    this.log(`_mediaPrev: Send request to rewind`)
     return new Promise((resolve, reject) => {
       this.lgtv.request(endpoints.media.rewind, (err, res) => {
         const {
@@ -841,10 +1012,10 @@ class WebOSTV extends Homey.Device {
           result,
         } = this._handleResponse(err, res, endpoints.media.rewind)
         if (error) {
-          this.error(`mediaRewind: ${ endpoint } with result:`, result)
+          this.error(`_mediaPrev: ${ endpoint } with result:`, result)
           return reject(error)
         }
-        this.log(`mediaRewind: Successfully rewind`)
+        this.log(`_mediaPrev: Successfully rewind`)
         return resolve(result)
       })
     })
@@ -925,10 +1096,7 @@ class WebOSTV extends Homey.Device {
 
     this.log(`_toastSend: Send request to create a toast message as`, data.iconExtension)
     if (data.iconData && data.iconExtension && data.iconExtension !== 'tiff') {
-      assertBase64ImageSize(data.iconData)
       data.iconData = await this._resizeIcon(data.iconData, data.iconExtension)
-    } else if (data.iconData) {
-      assertBase64ImageSize(data.iconData)
     }
 
     return this.request(endpoints.toast.create, data)
@@ -942,14 +1110,18 @@ class WebOSTV extends Homey.Device {
    * @private
    */
   _resizeIcon(base64, mimeType) {
-    const icon = Buffer.from(base64, 'base64')
-    return Jimp.read(icon)
-      .then(newIcon => newIcon.contain(80, 80).getBase64Async(`image/${ mimeType }`))
-      .then(stringData => stringData.split(',')[1])
-      .catch(err => {
-        this.error('_resizeIcon: ', err)
-        throw err
-      })
+    return new Promise((resolve, reject) => {
+      const icon = new Buffer(base64, 'base64')
+      Jimp.read(icon)
+        .then(async (newIcon) => {
+          const stringData = await newIcon.contain(80, 80).getBase64Async(`image/${ mimeType }`)
+          resolve(stringData.split(',')[1])
+        })
+        .catch(err => {
+          this.error('_resizeIcon: ', err)
+          reject(err)
+        })
+    })
   }
 
   /**
@@ -972,18 +1144,28 @@ class WebOSTV extends Homey.Device {
         }
 
         this.log(`_externalInputList: Retrieved all external inputs successfully`)
-        const inputs = result.devices.map(input => {
-          return {
-            name: input.label,
-            image: input.icon,
-            port: input.port,
-            id: input.id,
-            appId: input.appId,
-            imageLarge: input.icon,
-          }
-        })
-        this.log(`_externalInputList: Mapped all external inputs and resolve`)
-        return resolve(inputs)
+        if (!Array.isArray(result.devices)) {
+          const schemaError = new TypeError('_externalInputList: LG response devices is not an array')
+          this.error(schemaError)
+          return reject(schemaError)
+        }
+        try {
+          const inputs = result.devices.map(input => {
+            return {
+              name: input.label,
+              image: input.icon,
+              port: input.port,
+              id: input.id,
+              appId: input.appId,
+              imageLarge: input.icon,
+            }
+          })
+          this.log(`_externalInputList: Mapped all external inputs and resolve`)
+          return resolve(inputs)
+        } catch (mappingError) {
+          this.error('_externalInputList: Failed to map LG devices', mappingError)
+          return reject(mappingError)
+        }
       })
     })
   }
@@ -1025,7 +1207,11 @@ class WebOSTV extends Homey.Device {
     const data = {
       title: args.title || undefined,
       message: args.message,
-      buttons: parseAlertButtons(args.buttons),
+      buttons: [],
+    }
+
+    if (Boolean(args.buttons)) {
+      data.buttons = JSON.parse(args.buttons)
     }
 
     data.buttons.push({
@@ -1039,16 +1225,25 @@ class WebOSTV extends Homey.Device {
     if (!alertId) {
       throw new Error('Could not send an alert. Your TV probably does not support it!')
     }
-    const timeout = normaliseAlertTimeout(args.timeout)
-    if (timeout) {
-      this.alertCloseTimeouts.schedule(() => {
-        this.request(endpoints.alert.close, {alertId})
-          .then(closeResult => this.log('_alertSend: Closed', closeResult))
-          .catch(error => this.error('_alertSend: Could not close timed alert', error))
-      }, timeout * 1000)
+    if (args.timeout) {
+      setTimeout(async () => {
+        let closeResult
+        try {
+          closeResult = await this.request(endpoints.alert.close, {alertId})
+        } catch (error) {
+          try {
+            this.error('_alertSend: Automatic close failed', error)
+          } catch (loggingError) {
+            // Logging must not turn a handled close failure into a new rejection.
+          }
+          return
+        }
+        this.log('_alertSend: Closed', closeResult)
+      }, args.timeout * 1000)
     }
     this.log(`_alertSend: Successfully sent a alert message`, JSON.stringify(result))
   }
 }
 
 module.exports = WebOSTV
+

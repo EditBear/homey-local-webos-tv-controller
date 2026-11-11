@@ -21,31 +21,18 @@
 const Homey = require('homey')
 const http = require('http')
 const https = require('https')
-const {capabilities} = require('./webos/utils/constants')
-const {percentageToHomeyVolume} = require('./webos/utils/volume')
-const {runDeviceAction} = require('./webos/utils/action')
-const {
-  MAX_DISCOVERY_BYTES,
-  MAX_IMAGE_BYTES,
-  readStreamBounded,
-  assertImageContentType,
-} = require('./webos/utils/bounds')
-const {
-  validateDescriptionUrl,
-  createPairingDevice,
-} = require('./webos/utils/discovery')
-
-const HTTP_TIMEOUT_MS = 5000
+const {capabilities, endpoints} = require('./webos/utils/constants')
+const {isHomeyVolume} = require('./webos/utils/numeric-volume')
 
 class WebosPlusDriver extends Homey.Driver {
   onInit() {
-    this.initTriggers()
-    this.initActions()
-    this.initConditions()
     this.log('WebosPlus Driver has been inited')
   }
 
   initReady(callback) {
+    this.initTriggers()
+    this.initActions()
+    this.initConditions()
     return callback()
   }
 
@@ -63,8 +50,15 @@ class WebosPlusDriver extends Homey.Driver {
       })
     this._triggerChannelChangedToList
       .getArgument('channel')
-      .registerAutocompleteListener((query, args) => args.webosDevice.filteredChannelList(query))
+      .registerAutocompleteListener((query, args) => {
+        const device = args.webosDevice
+        return new Promise(async (resolve) => {
+          const channels = await device.filteredChannelList(query)
+          resolve(channels)
+        })
+      })
 
+    this._triggerSourceReported = this.homey.flow.getDeviceTriggerCard('webos_source_reported')
     this._triggerAppChanged = this.homey.flow.getDeviceTriggerCard('webos_app_changed')
     this._triggerAppChangedTo = this.homey.flow.getDeviceTriggerCard('webos_app_changed_to')
       .registerRunListener((args, state) => {
@@ -72,7 +66,13 @@ class WebosPlusDriver extends Homey.Driver {
       })
     this._triggerAppChangedTo
       .getArgument('app')
-      .registerAutocompleteListener((query, args) => args.webosDevice.filteredAppList(query))
+      .registerAutocompleteListener((query, args) => {
+        const device = args.webosDevice
+        return new Promise(async (resolve) => {
+          const apps = await device.filteredAppList(query)
+          resolve(apps)
+        })
+      })
     this._triggerSoundOutputChanged = this.homey.flow.getDeviceTriggerCard('webos_sound_output_changed')
     this._triggerSoundOutputChangedTo = this.homey.flow.getDeviceTriggerCard('webos_sound_output_changed_to')
       .registerRunListener((args, state) => {
@@ -83,42 +83,46 @@ class WebosPlusDriver extends Homey.Driver {
   triggerChannelChanged(device, tokens, state) {
     this._triggerChannelChanged
       .trigger(device, tokens, state)
-      .catch(error => this.error(error))
+      .catch(this.error)
     this._triggerChannelChangedToList
       .trigger(device, tokens, state)
-      .catch(error => this.error(error))
+      .catch(this.error)
     this._triggerChannelChangedToNumber
       .trigger(device, tokens, state)
-      .catch(error => this.error(error))
+      .catch(this.error)
+  }
+
+  triggerSourceReported(device, tokens, state) {
+    return this._triggerSourceReported.trigger(device, tokens, state)
   }
 
   triggerAppChanged(device, tokens, state) {
     this._triggerAppChanged
       .trigger(device, tokens, state)
-      .catch(error => this.error(error))
+      .catch(this.error)
     this._triggerAppChangedTo
       .trigger(device, tokens, state)
-      .catch(error => this.error(error))
+      .catch(this.error)
   }
 
   triggerSoundOutputChanged(device, tokens, state) {
     this._triggerSoundOutputChanged
       .trigger(device, tokens, state)
-      .catch(error => this.error(error))
+      .catch(this.error)
     this._triggerSoundOutputChangedTo
       .trigger(device, tokens, state)
-      .catch(error => this.error(error))
+      .catch(this.error)
   }
 
   triggerVolumeMuteChanged(device, tokens, state) {
     if (state.muted) {
       this._triggerVolumeMuted
         .trigger(device, tokens, state)
-        .catch(error => this.error(error))
+        .catch(this.error)
     } else {
       this._triggerVolumeUnmuted
         .trigger(device, tokens, state)
-        .catch(error => this.error(error))
+        .catch(this.error)
     }
   }
 
@@ -152,41 +156,57 @@ class WebosPlusDriver extends Homey.Driver {
     this.actionSimulateButton()
     this._actionSendToast = this.homey.flow.getActionCard('send_toast')
     this.actionSendToast()
+    this._actionSendToastWithImage = this.homey.flow.getActionCard('send_toast_with_image')
+    this.actionSendToastWithImage()
     this._actionChangeSoundOutput = this.homey.flow.getActionCard('change_sound_output')
     this.actionChangeSoundOutput()
     this._actionSwitchInput = this.homey.flow.getActionCard('switch_input')
     this.actionSwitchInput()
     this._actionSendAlert = this.homey.flow.getActionCard('send_alert')
     this.actionSendAlert()
-    this._actionMediaPlay = this.homey.flow.getActionCard('webos_media_play')
-    this.actionMediaPlay()
-    this._actionMediaPause = this.homey.flow.getActionCard('webos_media_pause')
-    this.actionMediaPause()
-    this._actionMediaToggle = this.homey.flow.getActionCard('webos_media_toggle')
-    this.actionMediaToggle()
-    this._actionMediaFastForward = this.homey.flow.getActionCard('webos_media_fast_forward')
-    this.actionMediaFastForward()
-    this._actionMediaRewind = this.homey.flow.getActionCard('webos_media_rewind')
-    this.actionMediaRewind()
+
+    this.homey.flow.getActionCard('webos_request_current_source')
+      .registerRunListener(({webosDevice}) => webosDevice.requestCurrentSource())
+
+    const playbackActions = {
+      webos_media_play: endpoints.media.play,
+      webos_media_pause: endpoints.media.pause,
+      webos_media_fast_forward: endpoints.media.fastForward,
+      webos_media_rewind: endpoints.media.rewind,
+    }
+    for (const [cardId, endpoint] of Object.entries(playbackActions)) {
+      this.homey.flow.getActionCard(cardId)
+        .registerRunListener(({webosDevice}) => webosDevice._sendPlaybackCommand(endpoint))
+    }
+    this.homey.flow.getActionCard('webos_media_toggle')
+      .registerRunListener(({webosDevice}) => webosDevice._sendLegacyPlaybackToggle())
   }
 
   conditionSoundOutput() {
     this._conditionSoundOutput
-      .registerRunListener(async (args, state) => {
+      .registerRunListener((args, state) => {
         const device = args.webosDevice
         const output = args.output
-        const result = await device._soundOutputCurrent()
-        return result.toLowerCase() === output.toLowerCase()
+        return new Promise((resolve, reject) => {
+          device._soundOutputCurrent().then((res) => {
+            resolve(res.toLowerCase() === output.toLowerCase())
+          }, reject)
+        })
       })
   }
 
   conditionChannelNumber() {
     this._conditionChannelNumber
-      .registerRunListener(async (args, state) => {
+      .registerRunListener((args, state) => {
         const device = args.webosDevice
         const channel = args.channel
-        const result = await device._channelCurrent()
-        return `${ channel }` === result.channelNumber
+        return new Promise((resolve, reject) => {
+          device._channelCurrent().then((res) => {
+            resolve(`${ channel }` === res.channelNumber)
+          }, (err) => {
+            reject(err)
+          })
+        })
       })
   }
 
@@ -195,86 +215,64 @@ class WebosPlusDriver extends Homey.Driver {
       .registerRunListener(async (args, state) => {
         const device = args.webosDevice
         const channel = args.channel
-        const result = await device._channelCurrent()
-        return channel.number === result.channelNumber
+        return new Promise((resolve, reject) => {
+          device._channelCurrent().then((res) => {
+            resolve(channel.number === res.channelNumber)
+          }, (err) => {
+            reject(err)
+          })
+        })
       })
       .getArgument('channel')
-      .registerAutocompleteListener((query, args) => args.webosDevice.filteredChannelList(query))
+      .registerAutocompleteListener((query, args) => {
+        const device = args.webosDevice
+        return new Promise(async (resolve) => {
+          const apps = await device.filteredChannelList(query)
+          resolve(apps)
+        })
+      })
   }
 
   conditionVolumeLarger() {
     this._conditionVolumeLarger
-      .registerRunListener(async (args, state) => {
+      .registerRunListener((args, state) => {
         const device = args.webosDevice
-        const volume = percentageToHomeyVolume(args.volume)
-        const status = await device.refreshVolumeStatus()
-        if (status.volume === undefined) throw new Error('LG volume status did not include volume')
-        const result = status.volume > volume
-        device.log(`conditionVolumeLarger: ${ status.volume } > ${ volume } is ${ result }`)
-        return result
+        const volume = args.volume
+        const deviceVolume = device.getCapabilityValue(capabilities.volumeSet)
+        return Promise.resolve(isHomeyVolume(deviceVolume) && typeof volume === 'number'
+          && Number.isFinite(volume) && volume >= 0 && volume <= 100 && deviceVolume > volume / 100)
       })
   }
 
   conditionVolumeSmaller() {
     this._conditionVolumeSmaller
-      .registerRunListener(async (args, state) => {
+      .registerRunListener((args, state) => {
         const device = args.webosDevice
-        const volume = percentageToHomeyVolume(args.volume)
-        const status = await device.refreshVolumeStatus()
-        if (status.volume === undefined) throw new Error('LG volume status did not include volume')
-        const result = status.volume < volume
-        device.log(`conditionVolumeSmaller: ${ status.volume } < ${ volume } is ${ result }`)
-        return result
+        const volume = args.volume
+        const deviceVolume = device.getCapabilityValue(capabilities.volumeSet)
+        return Promise.resolve(isHomeyVolume(deviceVolume) && typeof volume === 'number'
+          && Number.isFinite(volume) && volume >= 0 && volume <= 100 && deviceVolume < volume / 100)
       })
   }
 
   conditionVolumeEquals() {
     this._conditionVolumeEquals
-      .registerRunListener(async (args, state) => {
+      .registerRunListener((args, state) => {
         const device = args.webosDevice
-        const volume = percentageToHomeyVolume(args.volume)
-        const status = await device.refreshVolumeStatus()
-        if (status.volume === undefined) throw new Error('LG volume status did not include volume')
-        const result = status.volume === volume
-        device.log(`conditionVolumeEquals: ${ status.volume } === ${ volume } is ${ result }`)
-        return result
+        const volume = args.volume
+        const deviceVolume = device.getCapabilityValue(capabilities.volumeSet)
+        return Promise.resolve(isHomeyVolume(deviceVolume) && typeof volume === 'number'
+          && Number.isFinite(volume) && volume >= 0 && volume <= 100 && deviceVolume === volume / 100)
       })
   }
 
   conditionMuted() {
     this._conditionMuted
-      .registerRunListener(async (args, state) => {
+      .registerRunListener((args, state) => {
         const device = args.webosDevice
-        const status = await device.refreshVolumeStatus()
-        if (status.muted === undefined) throw new Error('LG volume status did not include muted state')
-        device.log(`conditionMuted: muted is ${ status.muted }`)
-        return status.muted
+        const muted = device.getCapabilityValue(capabilities.volumeMute)
+        return Promise.resolve(muted)
       })
-  }
-
-  actionMediaPlay() {
-    this._actionMediaPlay
-      .registerRunListener(args => runDeviceAction(() => args.webosDevice.mediaPlay()))
-  }
-
-  actionMediaPause() {
-    this._actionMediaPause
-      .registerRunListener(args => runDeviceAction(() => args.webosDevice.mediaPause()))
-  }
-
-  actionMediaToggle() {
-    this._actionMediaToggle
-      .registerRunListener(args => runDeviceAction(() => args.webosDevice.mediaTogglePlayPause()))
-  }
-
-  actionMediaFastForward() {
-    this._actionMediaFastForward
-      .registerRunListener(args => runDeviceAction(() => args.webosDevice.mediaFastForward()))
-  }
-
-  actionMediaRewind() {
-    this._actionMediaRewind
-      .registerRunListener(args => runDeviceAction(() => args.webosDevice.mediaRewind()))
   }
 
   conditionApp() {
@@ -282,11 +280,22 @@ class WebosPlusDriver extends Homey.Driver {
       .registerRunListener(async (args, state) => {
         const device = args.webosDevice
         const app = args.app
-        const result = await device._appCurrent()
-        return app.id === result.appId
+        return new Promise((resolve, reject) => {
+          device._appCurrent().then((res) => {
+            resolve(app.id === res.appId)
+          }, (err) => {
+            reject(err)
+          })
+        })
       })
       .getArgument('app')
-      .registerAutocompleteListener((query, args) => args.webosDevice.filteredAppList(query))
+      .registerAutocompleteListener((query, args) => {
+        const device = args.webosDevice
+        return new Promise(async (resolve) => {
+          const apps = await device.filteredAppList(query)
+          resolve(apps)
+        })
+      })
   }
 
   actionChangeSoundOutput() {
@@ -294,24 +303,74 @@ class WebosPlusDriver extends Homey.Driver {
       .registerRunListener((args, state) => {
         const device = args.webosDevice
         const {output} = args
-        return runDeviceAction(() => device._soundOutputSet(output))
+        return new Promise((resolve, reject) => {
+          device._soundOutputSet(output).then(() => {
+            resolve(true)
+          }, reject)
+        })
+      })
+  }
+
+  actionSendToastWithImage() {
+    this._actionSendToastWithImage
+      .registerRunListener((args, state) => {
+        const device = args.webosDevice
+        const {
+          message,
+          droptoken,
+        } = args
+        let icon = ''
+        return new Promise(async (resolve, reject) => {
+          if (droptoken) {
+            const imageStream = await droptoken.getStream()
+            icon = await new Promise((resolve) => {
+              imageStream.setEncoding('binary')
+              const type = imageStream.contentType
+              this.log('DRIVER TYPE', type)
+              const prefix = `data:${ type };base64,`
+              let body = ''
+
+              imageStream.on('data', (chunk) => {
+                body += chunk
+              })
+
+              imageStream.on('end', () => {
+                const base64 = Buffer.from(body, 'binary').toString('base64')
+                const data = prefix + base64
+                return resolve(data)
+              })
+            })
+          }
+
+          device._toastSend(message, icon).then(() => {
+            resolve(true)
+          }, () => {
+            resolve(true)
+          })
+        })
       })
   }
 
   actionSendToast() {
     this._actionSendToast
-      .registerRunListener(async (args, state) => {
+      .registerRunListener((args, state) => {
         const device = args.webosDevice
         const {
           message,
           iconData,
         } = args
         let icon = iconData
-        if (this._isUrl(iconData)) {
-          icon = await this.encodeImage(iconData)
-        }
+        return new Promise(async (resolve, reject) => {
+          if (this._isUrl(iconData)) {
+            icon = await this.encodeImage(iconData)
+          }
 
-        return runDeviceAction(() => device._toastSend(message, icon))
+          device._toastSend(message, icon).then(() => {
+            resolve(true)
+          }, (error) => {
+            reject(error)
+          })
+        })
       })
   }
 
@@ -319,7 +378,13 @@ class WebosPlusDriver extends Homey.Driver {
     this._actionSimulateButton
       .registerRunListener((args, state) => {
         const device = args.webosDevice
-        return runDeviceAction(() => device._simulateButton(args.button))
+        return new Promise((resolve, reject) => {
+          device._simulateButton(args.button).then(() => {
+            resolve(true)
+          }, (error) => {
+            reject(error)
+          })
+        })
       })
   }
 
@@ -327,7 +392,11 @@ class WebosPlusDriver extends Homey.Driver {
     this._actionChangeChannelNumber
       .registerRunListener((args, state) => {
         const device = args.webosDevice
-        return runDeviceAction(() => device.changeChannelVerified(`${ args.channel }`))
+        return new Promise((resolve, reject) => {
+          device._channelSet(`${ args.channel }`).then(() => {
+            resolve(true)
+          }, failure => reject(failure && failure.error ? failure.error : failure))
+        })
       })
   }
 
@@ -335,30 +404,64 @@ class WebosPlusDriver extends Homey.Driver {
     this._actionChangeChannelList
       .registerRunListener((args, state) => {
         const device = args.webosDevice
-        return runDeviceAction(() => device.changeChannelVerified(`${ args.channel.number }`))
+        return new Promise((resolve, reject) => {
+          device._channelSet(`${ args.channel.number }`).then(() => {
+            resolve(true)
+          }, failure => reject(failure && failure.error ? failure.error : failure))
+        })
       })
       .getArgument('channel')
-      .registerAutocompleteListener((query, args) => args.webosDevice.filteredChannelList(query))
+      .registerAutocompleteListener((query, args) => {
+        const device = args.webosDevice
+        return new Promise(async (resolve) => {
+          const channels = await device.filteredChannelList(query)
+          resolve(channels)
+        })
+      })
   }
 
   actionLaunchApp() {
     this._actionLaunchApp
       .registerRunListener((args, state) => {
         const device = args.webosDevice
-        return runDeviceAction(() => device._appLaunch(args.app.id))
+        return new Promise((resolve, reject) => {
+          device._appLaunch(args.app.id).then(() => {
+            resolve(true)
+          }, (_error) => {
+            reject(_error)
+          })
+        })
       })
       .getArgument('app')
-      .registerAutocompleteListener((query, args) => args.webosDevice.filteredAppList(query))
+      .registerAutocompleteListener((query, args) => {
+        const device = args.webosDevice
+        return new Promise(async (resolve) => {
+          const apps = await device.filteredAppList(query)
+          resolve(apps)
+        })
+      })
   }
 
   actionSwitchInput() {
     this._actionSwitchInput
       .registerRunListener((args, state) => {
         const device = args.webosDevice
-        return runDeviceAction(() => device._switchInput(args.input.id))
+        return new Promise((resolve, reject) => {
+          device._switchInput(args.input.id).then(() => {
+            resolve(true)
+          }, (_error) => {
+            reject(_error)
+          })
+        })
       })
       .getArgument('input')
-      .registerAutocompleteListener((query, args) => args.webosDevice.filteredExternalInputList(query))
+      .registerAutocompleteListener((query, args) => {
+        const device = args.webosDevice
+        return new Promise(async (resolve) => {
+          const apps = await device.filteredExternalInputList(query)
+          resolve(apps)
+        })
+      })
   }
 
   actionSendAlert() {
@@ -370,52 +473,44 @@ class WebosPlusDriver extends Homey.Driver {
   }
 
   async _mapDiscoveryResults(result) {
-    const info = await WebosPlusDriver._getInfo(result.headers.location)
-    const macAddress = await this.homey.arp.getMAC(result.address)
-    return createPairingDevice(result, info, macAddress)
+    return new Promise(async (resolve, _reject) => {
+      const info = await WebosPlusDriver._getInfo(result.headers.location).catch(this.error)
+      const macAddress = await this.homey.arp.getMAC(result.address).catch(this.error)
+      const device = {
+        name: info && info.friendlyName ? info.friendlyName : result.address,
+        data: {
+          id: result.id.replace(/uuid:/g, ''),
+        },
+        settings: {
+          macAddress,
+          ipAddress: result.address,
+        },
+      }
+      resolve(device)
+    })
   }
 
   async onPairListDevices(data, callback) {
     const discoveryStrategy = this.getDiscoveryStrategy()
     const discoveryResults = discoveryStrategy.getDiscoveryResults()
 
-    const results = Object.values(discoveryResults)
-    const settled = await Promise.allSettled(results.map(result => this._mapDiscoveryResults(result)))
-    const devices = []
-    const errors = []
-    settled.forEach(item => {
-      if (item.status === 'fulfilled') {
-        devices.push(item.value)
-      } else {
-        errors.push(item.reason)
-        this.error('Could not prepare discovered television for pairing', item.reason)
-      }
-    })
-    if (results.length > 0 && devices.length === 0) {
-      throw new Error(`Could not prepare any discovered television for pairing: ${ errors[0]?.message || 'unknown error' }`)
+    const devices = async () => {
+      return Promise.all(Object.values(discoveryResults).map(result => this._mapDiscoveryResults(result)))
     }
-    return devices
+
+    return await devices().catch()
   }
 
   static _getInfo(url) {
     return new Promise((resolve, reject) => {
-      let parsedUrl
-      try {
-        parsedUrl = validateDescriptionUrl(url)
-      } catch (error) {
-        reject(error)
-        return
-      }
-      const requester = parsedUrl.protocol === 'https:' ? https : http
-      const request = requester.get(parsedUrl, (response) => {
-        if (response.statusCode < 200 || response.statusCode >= 300) {
-          response.resume()
-          reject(new Error(`TV description request failed with HTTP ${ response.statusCode }`))
-          return
-        }
-        readStreamBounded(response, MAX_DISCOVERY_BYTES, 'TV description')
-          .then(buffer => {
-          const body = buffer.toString('utf8')
+      http.get(url, (response) => {
+        // Continuously update stream with data
+        let body = ''
+        response.on('data', (d) => {
+          body += d
+        })
+        response.on('end', () => {
+
           let tags = [
             'deviceType',
             'friendlyName',
@@ -435,11 +530,9 @@ class WebosPlusDriver extends Homey.Driver {
 
           resolve(result)
         })
-          .catch(reject)
-      })
-      request.on('error', reject)
-      request.setTimeout(HTTP_TIMEOUT_MS, () => {
-        request.destroy(new Error(`TV description request timed out after ${ HTTP_TIMEOUT_MS } ms`))
+        response.on('error', (err) => {
+          reject(err)
+        })
       })
     })
   }
@@ -461,23 +554,26 @@ class WebosPlusDriver extends Homey.Driver {
         imageUrl = `https://${ imageUrl }`
       }
 
-      const imageRequest = request.get(imageUrl, async (response) => {
-        try {
-          if (response.statusCode < 200 || response.statusCode >= 300) {
-            response.resume()
-            throw new Error(`Image request failed with HTTP ${ response.statusCode }`)
-          }
-          const type = assertImageContentType(response.headers['content-type'])
-          const body = await readStreamBounded(response, MAX_IMAGE_BYTES, 'Image response')
-          resolve(`data:${ type };base64,${ body.toString('base64') }`)
-        } catch (error) {
+      request.get(imageUrl, (response) => {
+        response.setEncoding('binary')
+        const type = response.headers['content-type']
+        const prefix = `data:${ type };base64,`
+        let body = ''
+
+        response.on('error', (error) => {
           reject(error)
-        }
+        })
+
+        response.on('data', (chunk) => {
+          body += chunk
+        })
+
+        response.on('end', () => {
+          const base64 = Buffer.from(body, 'binary').toString('base64')
+          const data = prefix + base64
+          return resolve(data)
+        })
       })
-      imageRequest.setTimeout(HTTP_TIMEOUT_MS, () => {
-        imageRequest.destroy(new Error(`Image request timed out after ${ HTTP_TIMEOUT_MS } ms`))
-      })
-      imageRequest.on('error', reject)
     })
   }
 

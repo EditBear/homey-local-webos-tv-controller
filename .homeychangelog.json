@@ -1,4 +1,32 @@
 {
+  "2.0.0": {
+    "en": "Improves local connection recovery, source and channel reporting, playback and command errors. Request current TV source gives Flows a fresh source report. Existing paired TVs retain their legacy Source and Channel tags when present. The deprecated Toggle Play/Pause card remains available. Tested on an LG G4 with webOS 25. TVs that reject the signed pairing certificate, including some webOS 26 TVs, may fail to pair or reconnect. Requires Homey 12.9.0 or later.",
+    "nl": "Verbetert het herstel van de lokale verbinding, bron- en kanaalrapportage, afspeelbediening en foutafhandeling. Vraag de huidige tv-bron op levert Flows een nieuw bronrapport. Bestaande gekoppelde tv’s behouden hun oude bron- en kanaaltags als die aanwezig zijn. De verouderde kaart Afspelen/pauzeren wisselen blijft beschikbaar. Getest op een LG G4 met webOS 25. Tv’s die het ondertekende koppelingscertificaat weigeren, waaronder sommige tv’s met webOS 26, kunnen problemen hebben met koppelen of opnieuw verbinden. Vereist Homey 12.9.0 of hoger."
+  },
+  "1.0.51": {
+    "en": "Added a TV source-reported Flow trigger with the raw source ID and receipt time, including fresh reports of an unchanged source. Existing source-change triggers retain their behaviour."
+  },
+  "1.0.50": {
+    "en": "Reissued the bounded LG application diagnostic capture as a higher version so locally installed diagnostic builds can migrate safely to Athom Test."
+  },
+  "1.0.49": {
+    "en": "Added an explicit, bounded diagnostic capture of unprocessed LG application metadata without changing normal source handling."
+  },
+  "1.0.48": {
+    "en": "Corrected bounded recovery after standby by clearing stale session state and ignoring obsolete socket events."
+  },
+  "1.0.47": {
+    "en": "Restored recovery when the LG control connection remains disconnected by starting a fresh bounded reconnect cycle only after exhausted attempts and a later TV discovery signal."
+  },
+  "1.0.46": {
+    "en": "Added bounded webOS 26 pairing compatibility, finite reconnection attempts and safe app/input Flow choices while retaining webOS 25 registration behaviour."
+  },
+  "1.0.45": {
+    "en": "Removed continuous Live TV channel polling and cancelled stale inferred-off timers immediately after LG reconnection."
+  },
+  "1.0.44": {
+    "en": "Restored Max-compatible LG connection retry behaviour while retaining safe retry cancellation, and rejected incomplete LG list responses without crashing the app."
+  },
   "1.0.43": {
     "en": "Prepared the independently published Local webOS TV Controller community release with original Store artwork, clear upstream credit and unchanged television-control behaviour from the live-verified 1.0.42 baseline."
   },

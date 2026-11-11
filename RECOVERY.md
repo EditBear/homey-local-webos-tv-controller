@@ -1,21 +1,21 @@
 # Recovery and local installation
 
 This repository contains the complete public source for Local webOS TV
-Controller. Release `v1.0.43` corresponds to the published Homey app version
-1.0.43.
+Controller. Tag `v2.0.0` identifies the source for Homey Test Build 11. Tag
+`v1.0.43` preserves the earlier Store release source.
 
 ## Requirements
 
 - a compatible Homey Pro and Homey account;
-- Node.js 20.17 or newer;
+- Node.js 22.12 or later in the 22 series, or Node.js 24 or newer;
 - npm and internet access when dependencies are not already available;
-- the Homey CLI supplied through this project's development dependencies.
+- Homey CLI 4.4.1, obtained by the project launcher.
 
 ## Restore from source
 
 ```sh
-npm ci
-npm test
+npm ci --omit=dev
+node --test test/*.test.cjs
 ./scripts/homey-local app build
 ./scripts/homey-local login
 ./scripts/homey-local select

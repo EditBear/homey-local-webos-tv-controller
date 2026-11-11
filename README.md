@@ -1,86 +1,35 @@
-# Local webOS TV Controller
+# Local webOS TV Controller 2.0.0
 
-Local webOS TV Controller is an independently published community Homey Pro application for
-compatible LG televisions. It communicates with the television over the local
-network and concentrates on detailed television control and automation.
+Local webOS TV Controller provides local LG webOS control, source and channel reporting, and Flow cards for TV commands. The source-reported trigger provides the raw source ID and report time, including fresh reports of the same source. Use Request current TV source to ask a connected TV for its current source.
 
-## Maintenance status
+Use the explicit Play, Pause, Fast Forward and Rewind cards for playback. Existing Flows can keep the deprecated Toggle Play/Pause card. Toggle follows the last acknowledged Homey Play or Pause and starts with Play when there is no reliable history. The TV remote can change playback independently.
 
-John Bear is not a programmer and cannot promise continuing maintenance.
-Contributions and offers to maintain the app are welcome. If a suitable
-maintainer wishes to take responsibility, John is willing to cooperate with
-Athom on an orderly transfer, preserving the existing app identity and
-protecting current users wherever possible. See `MAINTAINERSHIP.md`.
+App or input uses speaker_artist and Channel uses speaker_track. Some Homey-generated cards use Artist or Track wording. The older webos_display.app and webos_display.channel tags follow these reports on devices that already have them. Channel is empty outside Live TV or when the tuner has no current report. Use the current fields for new Flows.
 
-The GPL-3.0-or-later licence permits reuse and modification under its terms.
-Repository access does not transfer the existing Homey App Store listing, and
-Athom independently decides whether any separate Store submission is accepted.
+Requires Homey 12.9.0 or later. Tested on an LG G4 running webOS 25. Some webOS 26 TVs reject the signed pairing certificate and may fail to pair or reconnect with this version. If you are upgrading, keep the app and TV device installed so Homey can retain pairing, settings and saved Flow bindings. Flows that use the experimental Capture raw LG application diagnostics card from 1.0.51 Test need to remove that card.
 
-The app can monitor power, the foreground app or input, Live TV channels,
-sound output, volume and mute state. Its Flow cards cover channel and app
-selection, remote-control commands, television notifications, media commands
-and television-specific conditions and triggers.
+Homey's volume_set capability takes normalized values from 0 to 1; original custom volume conditions use 0 to 100. This does not make LG and external-speaker scales interchangeable. For Sonos, keep numeric volume control on the Sonos device and preserve existing volume limits. Do not use a TV reading as a Sonos volume value or automatically restore a guessed level. Explicit TV mute/unmute remains available.
 
-## Scope
+The app improves TV-speaker volume handling, source and channel freshness, command errors, remote buttons and alert closing. The LG 500 Application error on a background tuner report leaves Channel blank. An explicit command error still reaches the Flow.
 
-This is a specialist television controller. It complements LG ThinQ, whose
-Homey application serves LG's wider connected-appliance ecosystem. It is not
-an LG, Athom or original-author product and does not claim official status.
+Based on Max van de Laar's WebOS Plus: https://github.com/MaxvandeLaar/homey-webos-plus
+Original contributor credits, copyright notices and GPL-3.0-or-later licence are retained. The upstream project is credited as the source, not as support for this derivative. Use the app listing's support contact for this version.
 
-Functions depend on the television model, webOS version and enabled network
-settings. Numeric volume control requires an output that exposes LG's numeric
-volume. An external ARC or eARC system may use a separate scale. Media commands
-require an active player that accepts the corresponding webOS command.
+## Test release and source history
 
-## Verified release baseline
+This repository contains the source for **Homey Test 2.0.0, Build 11**. See the [full changelog](CHANGELOG-2.0.0.md) for the changes from Max’s original WebOS Plus, the earlier fork history and the release checks. [Homey Test page](https://homey.app/a/com.rompa.webos-plus-g4/test/) · [Homey Community thread](https://community.homey.app/t/lg-webos-better-integration/15007/552)
 
-Version 1.0.43 is a Store-packaging revision of the live-verified 1.0.42
-functional baseline. The accepted catalogue contains 14 WHEN, 9 AND and 25 THEN
-cards. The consolidated public change history is in
-`MAX-TO-JOHN-BEAR-REVISION-LOG-1.0.43.md`.
+Contributions and offers to maintain the app are welcome. [Contributing](CONTRIBUTING.md) · [Maintainers](MAINTAINERSHIP.md)
 
-## Provenance
+## Build and test
 
-This application is derived from WebOS Plus by Max van de Laar:
-
-https://github.com/MaxvandeLaar/homey-webos-plus
-
-Max van de Laar is credited as the original author. Dominic Vonk and Paul
-Molensky retain their inherited contributor credit. The bundled lgtv2 library
-is by Sebastian Raff and retains its MIT licence.
-
-The fork is published under the John Bear identity. See
-`NOTICE`, `LICENSE` and the consolidated revision record for attribution and
-licensing details.
-
-## Build, test and local installation
-
-Install Node.js 20.17 or newer and the locked project dependencies, then run:
+Use Node.js 22.12 or later in the 22 series, or Node.js 24 or newer, with npm. Install the locked runtime dependencies and run the offline tests before building. The launcher uses Homey CLI 4.4.1, the version used to build the Test release.
 
 ```sh
-npm ci
-npm test
+npm ci --omit=dev
+node --test test/*.test.cjs
+./scripts/homey-local app validate --level publish
 ./scripts/homey-local app build
 ```
 
-To install the app persistently on a compatible Homey Pro without using the
-Homey App Store, authenticate and select the Homey through the Homey CLI, then
-run:
-
-```sh
-./scripts/homey-local app install
-```
-
-See `RECOVERY.md` for the preservation boundaries and recovery procedure.
-The maintenance-tool update and its byte-for-byte runtime comparison are
-recorded in `RUNTIME-EQUIVALENCE.md`.
-
-## Support
-
-Support contact: wakeful.issue_8i@icloud.com
-
-Please include the television model, webOS version, Homey model, app version,
-active sound output and the exact Flow card when reporting a problem.
-
-Problem reports are welcomed, but this community release is provided on a
-best-effort basis without a guaranteed response or update schedule.
+See [local installation and recovery](RECOVERY.md) for the developer installation procedure.

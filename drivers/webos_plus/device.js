@@ -18,66 +18,47 @@
 
 'use strict';
 
+const fetch = require('node-fetch');
 const WebOSTV = require('./webos/WebOSTV');
 const {capabilities, store} = require('./webos/utils/constants');
-const {
-  VOLUME_CAPABILITY_OPTIONS,
-  homeyVolumeToLg,
-  lgVolumeToHomey,
-  normaliseStoredHomeyVolume,
-  normaliseVolumeStatus,
-  volumeCapabilityOptionsMatch,
-} = require('./webos/utils/volume');
-const {
-  bindCurrentConnection,
-  DisconnectOffGuard,
-} = require('./webos/utils/connection');
-const SubscriptionState = require('./webos/utils/subscription-state');
-const {
-  ChannelObservationState,
-  channelNumber,
-  verifyChannelSelection,
-} = require('./webos/utils/channel-reliability');
-const {
-  buildLaunchableAppList,
-  filterLaunchableApps,
-} = require('./webos/utils/launch-apps');
-const {validateDeviceSettings} = require('./webos/utils/settings');
-const {
-  LifecycleState,
-  SerialTaskQueue,
-} = require('./webos/utils/lifecycle');
+const {toLgVolume, fromLgVolume} = require('./webos/utils/numeric-volume');
+const {SourceNameReport, SOURCE_NAME_CAPABILITY} = require('./webos/utils/source-name-report');
+const {ChannelReport, CHANNEL_CAPABILITY} = require('./webos/utils/channel-report');
 const net = require('net');
-const CHANNEL_RECONCILE_INTERVAL_MS = 30000;
-const LEGACY_SPEAKER_ARTIST_CAPABILITY = 'speaker_artist';
-const LEGACY_SPEAKER_TRACK_CAPABILITY = 'speaker_track';
-const LEGACY_SPEAKER_ALBUM_CAPABILITY = 'speaker_album';
-const LEGACY_SPEAKER_PLAYING_CAPABILITY = 'speaker_playing';
-const LEGACY_SPEAKER_NEXT_CAPABILITY = 'speaker_next';
-const LEGACY_SPEAKER_PREV_CAPABILITY = 'speaker_prev';
+const https = require('https');
+
+const unsecureHttpsAgent = new https.Agent({
+  rejectUnauthorized: false,
+});
 
 class WebosPlusDevice extends WebOSTV {
   async onInit() {
+    this._channelStopped = false;
     // Init LGTV
     this.construct();
-    this.lifecycle = new LifecycleState();
-    this.reconnectQueue = new SerialTaskQueue();
-    this.channelObservationQueue = new SerialTaskQueue();
-    this.channelSubscription = new SubscriptionState(3);
-    this.channelRetryTimeout = null;
-    this.channelReconcileTimeout = null;
-    this.channelReconcileRunning = false;
-    this.channelObservation = new ChannelObservationState(this.getStoreValue(store.currentChannel));
-    this.currentForegroundApp = null;
-    this.mediaCommandPlaying = false;
-    this.disconnectOffGuard = new DisconnectOffGuard();
 
+    // Initialise media screen image
+    this.image = await this.homey.images.createImage();
+    this.image.setUrl(null);
+    this.setAlbumArtImage(this.image)
     this._driver = this.homey.drivers.getDriver('webos_plus');
 
     await this._driver.initReady(async () => {
       this.log('onInit: Device Ready!');
-      this.lifecycle.begin();
-      await this.registerCapabilities();
+      try {
+        await this.registerCapabilities();
+      } catch (error) {
+        this.error('startup: required capability setup failed', error);
+        if (!this._channelStopped) {
+          await this.setUnavailable('TV device setup failed.')
+            .catch(statusError => this.error('startup: could not mark device unavailable', statusError));
+        }
+        return;
+      }
+
+      // Setup can outlast shutdown. Do not start a late TV connection.
+      if (this._channelStopped) return;
+      // The transport connects asynchronously; attach reporting before yielding.
       this._connect();
       await this.initDevice();
     });
@@ -89,35 +70,37 @@ class WebosPlusDevice extends WebOSTV {
     return discoveryResult.id === this.getData().id;
   }
 
-  async onDiscoveryAvailable(discoveryResult) {
-    await this.setAvailable();
+  onDiscoveryAvailable(discoveryResult) {
+    this.setAvailable();
     const ipAddress = this.getSettings().ipAddress;
     if (this.getSettings().manualIpAddress === true && ipAddress !== '0.0.0.0'){
-      return true;
+      return Promise.resolve(true);
     }
     if (ipAddress !== discoveryResult.address) {
-      await this.setSettings({ipAddress: discoveryResult.address});
-      await this.reconnectDevice();
+      this.setSettings({ipAddress: discoveryResult.address}).then(() => {
+        this._connect();
+      }).catch(this.error);
     }
-    return true;
+    return Promise.resolve(true);
   }
 
-  async onDiscoveryAddressChanged(discoveryResult) {
-    await this.setAvailable();
+  onDiscoveryAddressChanged(discoveryResult) {
+    this.setAvailable();
     const ipAddress = this.getSettings().ipAddress;
     if (this.getSettings().manualIpAddress === true && ipAddress !== '0.0.0.0'){
-      return true;
+      return Promise.resolve(true);
     }
     if (ipAddress !== discoveryResult.address) {
-      await this.setSettings({ipAddress: discoveryResult.address});
-      await this.reconnectDevice();
+      this.setSettings({ipAddress: discoveryResult.address}).then(() => {
+        this._connect();
+      }).catch(this.error);
     }
-    return true;
+    return Promise.resolve(true);
   }
 
-  async onDiscoveryLastSeenChanged(discoveryResult) {
-    await this.setAvailable();
-    return true;
+  onDiscoveryLastSeenChanged(discoveryResult) {
+    this.setAvailable();
+    return Promise.resolve(true);
   }
 
   /**
@@ -125,95 +108,50 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<void>}
    */
   async initDevice() {
-    const client = this.lgtv;
-    const generation = this.lifecycle.generation;
+    if (!this._sourceNameReport && this.hasCapability(SOURCE_NAME_CAPABILITY)) {
+      this._sourceNameReport = new SourceNameReport(
+        value => this.setCapabilityValue(SOURCE_NAME_CAPABILITY, value),
+        error => this.error('state report: App or input', error),
+        this.getCapabilityValue(SOURCE_NAME_CAPABILITY),
+        this.legacyDisplayWriter('webos_display.app'),
+      );
+      this._sourceNameReport.reset();
+    }
+    if (this._sourceNameReport && this._sourceNameClient !== this.lgtv) {
+      if (this._sourceNameClient) {
+        this._sourceNameClient.removeListener('close', this._sourceNameClose);
+      }
+      const client = this.lgtv;
+      this._sourceNameClient = client;
+      this._sourceNameReport.reset();
+      this._sourceNameClose = () => {
+        if (this._sourceNameClient === client) this._sourceNameReport.reset();
+      };
+      client.on('close', this._sourceNameClose);
+    }
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
     }
     if (this.getSettings().usePoll) {
       this.poll();
     }
-    bindCurrentConnection(client, {
-      isCurrent: candidate => this.lifecycle.isCurrent(candidate, this.lgtv, generation),
-      onConnect: () => {
-        this.subsSet = false;
-        this.resetChannelSubscription();
-        if (!this.getSettings().usePoll) {
-          this.powerStateListener(client, generation);
-        }
-        this.volumeListener(client, generation);
-        this.appListener(client, generation);
-        this.soundOutputListener(client, generation);
-        this.channelListener(client, generation);
-      },
-      onClose: () => {
-        this.subsSet = false;
-        this.currentForegroundApp = null;
-        this.resetChannelSubscription();
-        this.clearChannelReconciliation();
-        this.scheduleDisconnectOff(client, generation, 'connection close');
-      },
-      onError: (error) => {
-        if (error.code === 'EHOSTUNREACH') {
-          this.scheduleDisconnectOff(client, generation, 'host unreachable');
-        }
-      },
+    this.lgtv.on('connect', () => {
+      if (!this.getSettings().usePoll) {
+        this.powerStateListener();
+      }
+      this.setCapabilityValue(capabilities.onOff, true)
+        .catch(error => this.error('state report: initDevice/connect onoff', error));
+      this.volumeListener();
+      this.channelListener();
+      this.appListener();
+      this.soundOutputListener();
     });
-  }
-
-  clearPendingDisconnectOff() {
-    if (this.disconnectOffGuard && this.disconnectOffGuard.cancel()) {
-      this.log('Power state: cancelled pending disconnect-off');
-    }
-  }
-
-  scheduleDisconnectOff(client, generation, reason) {
-    if (this.getSettings().usePoll || !this.disconnectOffGuard) return;
-    const scheduled = this.disconnectOffGuard.schedule(() => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
-      if (this.getCapabilityValue(capabilities.onOff) === false) return;
-      this.log(`Power state: disconnect-off grace expired (${reason})`);
-      this.reportBackground(
-        this.setCapabilityValue(capabilities.onOff, false),
-        'Power state: Could not mark persistently disconnected TV off',
-      );
+    this.lgtv.on('error', (error) => {
+      if (error.code === 'EHOSTUNREACH') {
+        this.setCapabilityValue(capabilities.onOff, false)
+          .catch(error => this.error('state report: initDevice/EHOSTUNREACH onoff', error));
+      }
     });
-    if (scheduled) {
-      this.log(`Power state: waiting before inferred off (${reason})`);
-    }
-  }
-
-  /**
-   * Replace the current LG client and attach a fresh set of guarded lifecycle
-   * and subscription handlers.
-   */
-  async reconnectDevice() {
-    return this.reconnectQueue.run(() => this._replaceConnection());
-  }
-
-  async _replaceConnection() {
-    const generation = this.lifecycle.begin();
-    if (generation === null) return false;
-    this.clearPendingDisconnectOff();
-    const previousClient = this.lgtv;
-    this.lgtv = null;
-    if (previousClient && typeof previousClient.disconnect === 'function') {
-      previousClient.disconnect();
-    }
-    if (this.simulateButtonSockTimeout) {
-      clearTimeout(this.simulateButtonSockTimeout);
-      this.simulateButtonSockTimeout = null;
-    }
-    this.alertCloseTimeouts.clearAll();
-    this.simulateButtonSock = null;
-    this.subsSet = false;
-    this.currentForegroundApp = null;
-    this.resetChannelSubscription();
-    this.clearChannelReconciliation();
-    if (this.lifecycle.deleted) return false;
-    this._connect();
-    await this.initDevice();
-    return true;
   }
 
   /**
@@ -222,31 +160,31 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<void>}
    */
   async registerCapabilities() {
-    await this.migrateDisplayCapabilities();
-
-    if (this.hasCapability(LEGACY_SPEAKER_PLAYING_CAPABILITY)) {
-      this.mediaCommandPlaying = this.getCapabilityValue(LEGACY_SPEAKER_PLAYING_CAPABILITY) === true;
-      await this.removeCapability(LEGACY_SPEAKER_PLAYING_CAPABILITY);
+    // Used for displaying the current app/input
+    if (!this.hasCapability(capabilities.speakerArtist)) {
+      await this.addCapability(capabilities.speakerArtist);
     }
 
-    if (this.hasCapability(LEGACY_SPEAKER_NEXT_CAPABILITY)) {
-      await this.removeCapability(LEGACY_SPEAKER_NEXT_CAPABILITY);
+    // Used for displaying the current channel
+    if (!this.hasCapability(capabilities.speakerTrack)) {
+      await this.addCapability(capabilities.speakerTrack);
     }
 
-    if (this.hasCapability(LEGACY_SPEAKER_PREV_CAPABILITY)) {
-      await this.removeCapability(LEGACY_SPEAKER_PREV_CAPABILITY);
+    // Used for displaying the app/input icon
+    if (!this.hasCapability(capabilities.speakerAlbum)) {
+      await this.addCapability(capabilities.speakerAlbum);
     }
 
-    const volumeOptions = this.getCapabilityOptions(capabilities.volumeSet);
-    if (!volumeCapabilityOptionsMatch(volumeOptions)) {
-      this.log('registerCapabilities: Correct volume_set capability options');
-      await this.setCapabilityOptions(capabilities.volumeSet, VOLUME_CAPABILITY_OPTIONS);
+    if (!this.hasCapability(capabilities.speakerPlaying)) {
+      await this.addCapability(capabilities.speakerPlaying);
     }
-    const storedVolume = this.getCapabilityValue(capabilities.volumeSet);
-    const normalisedStoredVolume = normaliseStoredHomeyVolume(storedVolume);
-    if (storedVolume !== normalisedStoredVolume) {
-      this.log(`registerCapabilities: Migrate volume_set from ${storedVolume} to ${normalisedStoredVolume}`);
-      await this.setCapabilityValue(capabilities.volumeSet, normalisedStoredVolume);
+
+    if (!this.hasCapability(capabilities.speakerNext)) {
+      await this.addCapability(capabilities.speakerNext);
+    }
+
+    if (!this.hasCapability(capabilities.speakerPrev)) {
+      await this.addCapability(capabilities.speakerPrev);
     }
 
     this.registerCapabilityListener(capabilities.onOff, this.toggleOnOff.bind(this));
@@ -256,98 +194,55 @@ class WebosPlusDevice extends WebOSTV {
     this.registerCapabilityListener(capabilities.volumeDown, this.volumeDown.bind(this));
     this.registerCapabilityListener(capabilities.channelUp, this._channelUp.bind(this));
     this.registerCapabilityListener(capabilities.channelDown, this._channelDown.bind(this));
+    this.registerCapabilityListener(capabilities.speakerPlaying, this._mediaTogglePlayPause.bind(this));
+    this.registerCapabilityListener(capabilities.speakerNext, this._mediaNext.bind(this));
+    this.registerCapabilityListener(capabilities.speakerPrev, this._mediaPrev.bind(this));
+    // A slow cosmetic option write must not hold up device reporting/controls.
+    this.updateReportingTitles().catch(error => this.error('state report: reporting titles', error));
   }
 
-  /**
-   * Replace inherited speaker-metadata capabilities that were used to display
-   * an LG app/input and channel. Add and seed both accurate display values
-   * before removing any legacy capability so a failed migration is non-lossy.
-   *
-   * @returns {Promise<void>}
-   */
-  async migrateDisplayCapabilities() {
-    const migrations = [
-      {
-        legacy: LEGACY_SPEAKER_ARTIST_CAPABILITY,
-        replacement: capabilities.displayApp,
-      },
-      {
-        legacy: LEGACY_SPEAKER_TRACK_CAPABILITY,
-        replacement: capabilities.displayChannel,
-      },
-    ];
-    const legacyValues = new Map();
-
-    for (const migration of migrations) {
-      if (this.hasCapability(migration.legacy)) {
-        legacyValues.set(migration.legacy, this.getCapabilityValue(migration.legacy));
-      }
-    }
-
-    for (const migration of migrations) {
-      if (!this.hasCapability(migration.replacement)) {
-        this.log(`Display capability migration: add ${migration.replacement}`);
-        await this.addCapability(migration.replacement);
-      }
-    }
-
-    for (const migration of migrations) {
-      const legacyValue = legacyValues.get(migration.legacy);
-      const currentValue = this.getCapabilityValue(migration.replacement);
-      if (typeof legacyValue === 'string'
-        && legacyValue.trim() !== ''
-        && (typeof currentValue !== 'string' || currentValue.trim() === '')) {
-        this.log(`Display capability migration: copy ${migration.legacy} to ${migration.replacement}`);
-        await this.setCapabilityValue(migration.replacement, legacyValue);
-      }
-    }
-
-    for (const legacyCapability of [
-      LEGACY_SPEAKER_ARTIST_CAPABILITY,
-      LEGACY_SPEAKER_TRACK_CAPABILITY,
-      LEGACY_SPEAKER_ALBUM_CAPABILITY,
+  async updateReportingTitles() {
+    // Preserve retained options and field identities; change visible titles only.
+    for (const [id, title] of [
+      [capabilities.speakerArtist, {en: 'App or input', nl: 'App of ingang'}],
+      [capabilities.speakerTrack, {en: 'Channel', nl: 'Zender'}],
     ]) {
-      if (this.hasCapability(legacyCapability)) {
-        this.log(`Display capability migration: remove ${legacyCapability}`);
-        await this.removeCapability(legacyCapability);
-      }
+      try {
+        if (!this.hasCapability(id)) continue;
+        const options = this.getCapabilityOptions(id) || {};
+        if (Object.keys(title).every(language => options.title && options.title[language] === title[language])) continue;
+        await this.setCapabilityOptions(id, {...options, title: {...options.title, ...title}});
+      } catch (error) { this.error('state report: reporting title', id, error); }
     }
   }
 
   /**
    * Listen for changes in on/off state
    */
-  powerStateListener(client = this.lgtv, generation = this.lifecycle.generation) {
+  powerStateListener() {
     this.log(`powerStateListener: Called`);
     this._powerStateListener(() => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
-      this.clearPendingDisconnectOff();
       this.log(`powerStateListener: received on`);
-      this.reportBackground(
-        this.setCapabilityValue(capabilities.onOff, true),
-        'powerStateListener: Could not mark TV on',
-      );
+      this.setCapabilityValue(capabilities.onOff, true)
+        .catch(error => this.error('state report: powerStateListener/on onoff', error));
     }, () => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
-      this.clearPendingDisconnectOff();
       this.log(`powerStateListener: received off`);
-      this.reportBackground(
-        this.setCapabilityValue(capabilities.onOff, false),
-        'powerStateListener: Could not mark TV off',
-      );
+      this.setCapabilityValue(capabilities.onOff, false)
+        .catch(error => this.error('state report: powerStateListener/off onoff', error));
     });
   }
 
-  async onSettings({oldSettings, newSettings, changedKeys}) {
-    validateDeviceSettings(newSettings);
-    const reconnectKeys = ['usePoll', 'manualIpAddress', 'ipAddress'];
-    if (changedKeys.some(key => reconnectKeys.includes(key))){
-      await this.reconnectDevice();
-    } else if (newSettings.usePoll
-      && changedKeys.some(key => key === 'pollInterval' || key === 'pollTimeout')) {
+  onSettings({oldSettings, newSettings, changedKeys}) {
+    if (oldSettings.usePoll !== newSettings.usePoll){
+      this.lgtv.disconnect();
+      this.construct();
+      this._connect();
+      this.initDevice();
+    }
+    if (newSettings.usePoll) {
       this.poll();
     }
-    return true;
+    return Promise.resolve(true);
   }
 
   poll() {
@@ -356,34 +251,19 @@ class WebosPlusDevice extends WebOSTV {
     }
 
     this.pollInterval = setInterval(() => {
-      const generation = this.lifecycle.generation;
-      if (!this.lifecycle.isGeneration(generation)) return;
       const client = new net.Socket();
       const cancel = setTimeout(() => {
-        if (!this.lifecycle.isGeneration(generation)) {
-          client.destroy();
-          return;
-        }
         if (this.getCapabilityValue(capabilities.onOff)){
-          this.reportBackground(
-            this.setCapabilityValue(capabilities.onOff, false),
-            'poll: Could not mark timed-out TV off',
-          );
+          this.setCapabilityValue(capabilities.onOff, false)
+            .catch(error => this.error('state report: poll/timeout onoff', error));
         }
         client.destroy();
       }, this.getSettings().pollTimeout * 1000);
 
       client.on('error', (error) => {
-        if (!this.lifecycle.isGeneration(generation)) {
-          clearTimeout(cancel);
-          client.destroy();
-          return;
-        }
         if (this.getCapabilityValue(capabilities.onOff)){
-          this.reportBackground(
-            this.setCapabilityValue(capabilities.onOff, false),
-            'poll: Could not mark unreachable TV off',
-          );
+          this.setCapabilityValue(capabilities.onOff, false)
+            .catch(error => this.error('state report: poll/error onoff', error));
         }
         this.error(error);
         clearTimeout(cancel);
@@ -391,18 +271,14 @@ class WebosPlusDevice extends WebOSTV {
       });
 
       client.connect(3000, this.getSettings().ipAddress, () => {
-        if (!this.lifecycle.isGeneration(generation)) {
-          clearTimeout(cancel);
-          client.destroy();
-          return;
-        }
         if (!this.getCapabilityValue(capabilities.onOff)) {
-          this.reportBackground(
-            this.setCapabilityValue(capabilities.onOff, true),
-            'poll: Could not mark reachable TV on',
-          );
+          this.setCapabilityValue(capabilities.onOff, true)
+            .catch(error => this.error('state report: poll/connect onoff', error));
           if (!this.subsSet) {
-            this.reconnectDevice().catch(error => this.error(error));
+            this.lgtv.disconnect();
+            this.construct();
+            this._connect();
+            this.initDevice();
           }
         }
         clearTimeout(cancel);
@@ -411,171 +287,194 @@ class WebosPlusDevice extends WebOSTV {
     }, this.getSettings().pollInterval * 1000);
   }
 
-  async onDeleted() {
-    this.clearPendingDisconnectOff();
-    this.lifecycle.stop();
-    if (this.pollInterval) {
-      clearInterval(this.pollInterval);
-      this.pollInterval = null;
-    }
-    if (this.simulateButtonSockTimeout) {
-      clearTimeout(this.simulateButtonSockTimeout);
-      this.simulateButtonSockTimeout = null;
-    }
-    this.alertCloseTimeouts.clearAll();
-    this.resetChannelSubscription();
-    this.clearChannelReconciliation();
-    if (this.simulateButtonSock && typeof this.simulateButtonSock.close === 'function') {
-      this.simulateButtonSock.close();
-      this.simulateButtonSock = null;
-    }
-    const currentClient = this.lgtv;
-    this.lgtv = null;
-    if (currentClient && typeof currentClient.disconnect === 'function') {
-      currentClient.disconnect();
-    }
-  }
-
   checkOnOff(value) {
     if (value === null || value === undefined || value === '') {
-      this.reportBackground(
-        this.setCapabilityValue(capabilities.onOff, false),
-        'checkOnOff: Could not mark TV off',
-      );
+      this.setCapabilityValue(capabilities.onOff, false)
+        .catch(error => this.error('state report: checkOnOff/absent onoff', error));
       return false;
     } else {
-      this.reportBackground(
-        this.setCapabilityValue(capabilities.onOff, true),
-        'checkOnOff: Could not mark TV on',
-      );
+      this.setCapabilityValue(capabilities.onOff, true)
+        .catch(error => this.error('state report: checkOnOff/present onoff', error));
       return true;
     }
   }
 
-  reportBackground(promise, context) {
-    Promise.resolve(promise).catch(error => this.error(context, error));
+  /**
+   * Validate one value against an existing string Flow-token contract.
+   *
+   * This deliberately does not trim, relabel, serialise or generically
+   * stringify LG data. A genuinely absent previous value may be represented
+   * by an empty string, and channel numbers may be converted explicitly from
+   * finite numbers to decimal text. All other mismatches are rejected.
+   *
+   * @param {string} field Flow-token field name used for bounded diagnostics
+   * @param {*} value Value to validate
+   * @param {object} options Validation options
+   * @param {boolean} options.allowAbsent Whether null/undefined means no prior value
+   * @param {boolean} options.allowFiniteNumber Whether a finite number is a valid channel
+   * @returns {{valid: boolean, value?: string}}
+   * @private
+   */
+  _flowStringToken(field, value, {allowAbsent = false, allowFiniteNumber = false} = {}) {
+    if (typeof value === 'string') {
+      return {valid: true, value};
+    }
+
+    if (allowAbsent && (value === null || value === undefined)) {
+      return {valid: true, value: ''};
+    }
+
+    if (allowFiniteNumber && typeof value === 'number' && Number.isFinite(value)) {
+      return {valid: true, value: `${value}`};
+    }
+
+    const receivedType = value === null
+      ? 'null'
+      : Array.isArray(value)
+        ? 'array'
+        : typeof value === 'number' && !Number.isFinite(value)
+          ? 'non-finite number'
+          : typeof value;
+    const warningKey = `${field}:${receivedType}`;
+
+    if (!this._flowTokenWarningKeys) {
+      this._flowTokenWarningKeys = new Set();
+    }
+    if (!this._flowTokenWarningKeys.has(warningKey)) {
+      this._flowTokenWarningKeys.add(warningKey);
+      this.error(`flowToken: Suppressed Flow trigger because '${field}' must be a string; received ${receivedType}`);
+    }
+
+    return {valid: false};
   }
 
   /**
    * Listen for changes in volume
    */
-  volumeListener(client = this.lgtv, generation = this.lifecycle.generation) {
+  volumeListener() {
     this.log(`volumeListener: Called`);
-    this._volumeListener((newVolume) => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
-      if (!this.checkOnOff(newVolume)) {
+    this._volumeListener((newVolume, legacyPowerReport) => {
+      // Preserve the inherited power check only for its original report path.
+      if (legacyPowerReport && !this.checkOnOff(legacyPowerReport.value)) {
         return;
       }
-      let normalisedVolume;
-      try {
-        normalisedVolume = normaliseVolumeStatus({volume: newVolume}).volume;
-      } catch (error) {
-        this.error(`volumeListener: Invalid LG volume '${newVolume}'`, error);
-        return;
-      }
+      const normalizedVolume = fromLgVolume(newVolume);
+      if (normalizedVolume === null) return;
       const currentVolume = this.getCapabilityValue(capabilities.volumeSet);
-      this.log(`volumeListener: Volume changed from ${currentVolume} to ${normalisedVolume}`);
-      if (currentVolume !== normalisedVolume) {
-        this.log(`volumeListener: Capability ${capabilities.volumeSet} to ${normalisedVolume}`);
-        this.setCapabilityValue(capabilities.volumeSet, normalisedVolume)
-          .catch(error => this.error(error));
+      this.log(`volumeListener: Volume changed from ${currentVolume} to ${normalizedVolume}`);
+      if (currentVolume !== normalizedVolume) {
+        this.log(`volumeListener: Capability ${capabilities.volumeSet} to ${normalizedVolume}`);
+        this.setCapabilityValue(capabilities.volumeSet, normalizedVolume)
+          .catch(error => this.error('state report: volumeListener volume_set', error));
       }
     }, (newMutedValue) => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
       if (!this.checkOnOff(newMutedValue)) {
         return;
       }
-      let normalisedMutedValue;
-      try {
-        normalisedMutedValue = normaliseVolumeStatus({muted: newMutedValue}).muted;
-      } catch (error) {
-        this.error(`volumeListener: Invalid LG muted state '${newMutedValue}'`, error);
-        return;
-      }
       const currentMute = this.getCapabilityValue(capabilities.volumeMute);
-      this.log(`volumeListener: Mute changed from ${currentMute} to ${normalisedMutedValue}`);
-      if (currentMute !== normalisedMutedValue) {
-        this.log(`volumeListener: Capability ${capabilities.volumeMute} to ${normalisedMutedValue}`);
-        this.setCapabilityValue(capabilities.volumeMute, normalisedMutedValue)
-          .catch(error => this.error(error));
-        this.reportBackground(
-          this._driver.triggerVolumeMuteChanged(this, {}, {muted: normalisedMutedValue}),
-          'volumeListener: Could not trigger mute Flow',
-        );
+      this.log(`volumeListener: Mute changed from ${currentMute} to ${newMutedValue}`);
+      if (currentMute !== newMutedValue) {
+        this.log(`volumeListener: Capability ${capabilities.volumeMute} to ${newMutedValue}`);
+        this.setCapabilityValue(capabilities.volumeMute, newMutedValue)
+          .catch(this.error);
+        this._driver.triggerVolumeMuteChanged(this, {}, {muted: newMutedValue});
       }
     });
   }
 
-  async refreshVolumeStatus() {
-    const status = normaliseVolumeStatus(await this._volumeCurrent());
-    if (status.volume !== undefined
-      && this.getCapabilityValue(capabilities.volumeSet) !== status.volume) {
-      await this.setCapabilityValue(capabilities.volumeSet, status.volume);
+  async requestCurrentSource() {
+    const client = this.lgtv;
+    const report = this._sourceNameReport;
+    if (!client || !report || this._sourceNameClient !== client || this._channelStopped) {
+      throw new Error('TV source reporting is unavailable');
     }
-    if (status.muted !== undefined
-      && this.getCapabilityValue(capabilities.volumeMute) !== status.muted) {
-      await this.setCapabilityValue(capabilities.volumeMute, status.muted);
+    if (this._currentSourceRequestPending) {
+      throw new Error('A current TV source request is already pending');
     }
-    return status;
-  }
 
-  async mediaPlay() {
-    const result = await this._mediaTogglePlayPause(true);
-    this.mediaCommandPlaying = true;
-    return result;
-  }
+    // Subscription reports and connection resets advance the existing sequence.
+    const sequence = report.sequence;
+    this._currentSourceRequestPending = true;
+    try {
+      const {result, reportedAt} = await this._appCurrent({withReportTime: true});
+      if (this._channelStopped || this.lgtv !== client ||
+        this._sourceNameReport !== report || report.sequence !== sequence) {
+        throw new Error('The TV source request was superseded');
+      }
 
-  async mediaPause() {
-    const result = await this._mediaTogglePlayPause(false);
-    this.mediaCommandPlaying = false;
-    return result;
-  }
+      const source = result.appId;
+      if (typeof source !== 'string' || source.length === 0 ||
+        source.trim() !== source || /[\x00-\x1f\x7f|]/.test(source)) {
+        throw new Error('LG did not return a usable TV source ID');
+      }
 
-  async mediaTogglePlayPause() {
-    return this.mediaCommandPlaying ? this.mediaPause() : this.mediaPlay();
+      const sourceReport = {source, reportedAt};
+      await this._driver.triggerSourceReported(this, sourceReport, {...sourceReport});
+      return true;
+    } finally {
+      this._currentSourceRequestPending = false;
+    }
   }
 
   /**
    * Listen for changes in app/input
    */
-  appListener(client = this.lgtv, generation = this.lifecycle.generation) {
+  appListener() {
     this.log(`appListener: Called`);
+    const report = this._sourceNameReport;
+    const client = this.lgtv;
+    const generation = report ? report.reset() : null;
+    const channelReport = this._channelReport;
+    const channelGeneration = channelReport ? channelReport.generation : null;
     this._appListener(async (newAppId) => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
+      const reportedAt = Date.now();
+      if (channelReport && client === this.lgtv) channelReport.source(channelGeneration, newAppId);
+      if (client !== this.lgtv && report) report.invalidate(generation);
+      const nameTicket = report && client === this.lgtv
+        ? report.begin(generation, newAppId) : null;
       const oldAppId = this.getStoreValue(store.currentApp);
-      const oldAppToken = typeof oldAppId === 'string' ? oldAppId : '';
-      const newAppToken = typeof newAppId === 'string' ? newAppId : '';
       this.log(`appListener: App/input changed from ${oldAppId} to ${newAppId}`);
       if (!this.checkOnOff(newAppId)) {
         return;
       }
-      this.currentForegroundApp = newAppId;
+
+      // A fresh report is useful even when the source did not change. Reuse
+      // the current reporter ticket; do not alter its display/channel work.
+      if (nameTicket && client === this.lgtv && generation === report.generation
+        && !this._channelStopped && newAppId.trim() !== '') {
+        const sourceReport = {source: newAppId, reportedAt};
+        // Homey Flow delivery must never delay or interrupt existing reporting.
+        try {
+          Promise.resolve(this._driver.triggerSourceReported(this, sourceReport, {...sourceReport}))
+            .catch(error => this.error('state report: source-reported Flow', error));
+        } catch (error) {
+          this.error('state report: source-reported Flow', error);
+        }
+      }
 
       if (newAppId !== oldAppId) {
         this.log(`appListener: Store ${store.currentApp} set to ${newAppId}`);
-        this.reportBackground(
-          this.setStoreValue(store.currentApp, newAppId),
-          'appListener: Could not store current app',
-        );
+        this.setStoreValue(store.currentApp, newAppId)
+          .catch(error => this.error('state report: app store', error));
 
-        this.log(`appListener: Flow trigger app/input changed`);
-        this.reportBackground(this._driver.triggerAppChanged(this, {
-          oldApp: oldAppToken,
-          newApp: newAppToken
-        }, {
-          oldApp: oldAppToken,
-          newApp: newAppToken
-        }), 'appListener: Could not trigger app-change Flow');
+        const oldApp = this._flowStringToken('oldApp', oldAppId, {allowAbsent: true});
+        const newApp = this._flowStringToken('newApp', newAppId);
+        if (oldApp.valid && newApp.valid) {
+          const flowValues = {
+            oldApp: oldApp.value,
+            newApp: newApp.value
+          };
+          this.log(`appListener: Flow trigger app/input changed`);
+          this._driver.triggerAppChanged(this, flowValues, {...flowValues});
+        }
       }
 
       this.log(`appListener: Gather media screen information for ${newAppId}`);
-      // listApps includes system applications such as Live TV that LG omits
-      // from listLaunchPoints on current webOS televisions.
-      const allApps = await this._appList().catch(error => {
-        this.error(error);
-        return null;
-      });
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
+      const allApps = await this._appListLaunchPoints().catch(this.error);
+      if (report) {
+        if (client === this.lgtv) report.resolve(nameTicket, allApps);
+        else report.invalidate(generation);
+      }
       if (!allApps) {
         this.error('appListener: No Apps/inputs found');
         return;
@@ -587,251 +486,198 @@ class WebosPlusDevice extends WebOSTV {
       }
 
       this.log(`appListener: App found for '${newAppId}' ${app.name}`);
-      this.reportBackground(
-        this.setCapabilityValue(capabilities.displayApp, app.name),
-        'appListener: Could not update application name',
-      );
+      // Text fields are supplied only by the guarded reporters. Keep the
+      // shared catalogue and artwork, without the redundant channel read.
 
-      if (newAppId !== 'com.webos.app.livetv') {
-        this.clearChannelRetry();
-        this.clearChannelReconciliation();
-        this.log(`appListener: '${newAppId}' is not Live TV. Set capability ${capabilities.displayChannel} to empty string`);
-        this.reportBackground(
-          this.setCapabilityValue(capabilities.displayChannel, ''),
-          'appListener: Could not clear channel information',
-        );
-      } else {
-        // LG reports the Live TV foreground app before its broadcast service is
-        // ready. Wait briefly and retry so a normal source transition is not
-        // misreported as a channel-service failure.
-        let channel = null;
-        for (let attempt = 1; attempt <= 3 && !channel; attempt += 1) {
-          await new Promise(resolve => setTimeout(resolve, attempt === 1 ? 750 : 500));
-          if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
-          if (this.getStoreValue(store.currentApp) !== newAppId) {
-            this.log(`appListener: Source changed while waiting for Live TV channel information`);
-            break;
-          }
-          this.log(`appListener: Get Live TV channel information (attempt ${attempt})`);
-          channel = await this._channelCurrent().catch(() => null);
-          if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
-        }
-
-        if (!channel) {
-          this.log(`appListener: Live TV channel information is not ready. Keep the existing channel display`);
-        } else {
-          this.log(`appListener: Channel found for '${newAppId}' ${app.name}. Set capability ${capabilities.displayChannel} to '${this._formatChannelDisplay(channel.channelNumber, channel.channelName)}'`);
-          this.reportBackground(
-            this.setCapabilityValue(capabilities.displayChannel, this._formatChannelDisplay(channel.channelNumber, channel.channelName)),
-            'appListener: Could not update channel information',
-          );
-        }
-        if (newAppId !== oldAppId) {
-          this.channelSubscription.resetFailures();
-        }
-        this.channelListener(client, generation);
-        this.scheduleChannelReconciliation(client, generation);
+      if (!app.imageLarge && !app.image) {
+        this.log(`appListener: No image found for '${newAppId}' ${app.name}`);
+        return;
       }
 
+      this.log(`appListener: Set image for '${newAppId}' ${app.name} (${app.imageLarge || app.image})`);
+      this.image.setStream(async (stream) => {
+
+        const appImage = await fetch(app.imageLarge || app.image, {method: 'get', agent: unsecureHttpsAgent}).catch(this.error);
+
+        if (!appImage.ok) {
+          this.error('appListener: Get image failed');
+          throw new Error('Invalid Response');
+        }
+
+        return appImage.body.pipe(stream);
+      });
+
+      this.image.update();
     });
   }
 
   /**
    * Listen for changes in sound output
    */
-  soundOutputListener(client = this.lgtv, generation = this.lifecycle.generation) {
+  soundOutputListener() {
     this.log(`soundOutputListener: Called`);
     this._soundOutputListener((newSoundOutput) => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) return;
       if (!this.checkOnOff(newSoundOutput)) {
         return;
       }
 
       const oldSoundOutput = this.getStoreValue(store.currentSoundOutput);
-      const oldSoundOutputToken = typeof oldSoundOutput === 'string' ? oldSoundOutput : '';
-      const newSoundOutputToken = typeof newSoundOutput === 'string' ? newSoundOutput : '';
       this.log(`soundOutputListener: Sound output changed from ${oldSoundOutput} to ${newSoundOutput}`);
 
-      if (newSoundOutput && oldSoundOutput !== newSoundOutput) {
-        this.log(`soundOutputListener: Store ${store.currentSoundOutput} to ${newSoundOutput}`);
-        this.reportBackground(
-          this.setStoreValue(store.currentSoundOutput, newSoundOutput),
-          'soundOutputListener: Could not store current sound output',
-        );
+      if (oldSoundOutput !== newSoundOutput) {
+        const oldOutput = this._flowStringToken('oldSoundOutput', oldSoundOutput, {allowAbsent: true});
+        const newOutput = this._flowStringToken('newSoundOutput', newSoundOutput);
 
-        this.log(`soundOutputListener: Flow trigger sound output changed`);
-        this.reportBackground(this._driver.triggerSoundOutputChanged(this, {
-          oldSoundOutput: oldSoundOutputToken,
-          newSoundOutput: newSoundOutputToken
-        }, {
-          oldSoundOutput: oldSoundOutputToken,
-          newSoundOutput: newSoundOutputToken
-        }), 'soundOutputListener: Could not trigger sound-output Flow');
+        // Preserve Max's existing rule that a falsy sound-output value is not
+        // stored or emitted, while still diagnosing a malformed Flow boundary.
+        if (!newSoundOutput) {
+          return;
+        }
+
+        this.log(`soundOutputListener: Store ${store.currentSoundOutput} to ${newSoundOutput}`);
+        this.setStoreValue(store.currentSoundOutput, newSoundOutput)
+          .catch(error => this.error('state report: sound output store', error));
+
+        if (oldOutput.valid && newOutput.valid) {
+          const flowValues = {
+            oldSoundOutput: oldOutput.value,
+            newSoundOutput: newOutput.value
+          };
+          this.log(`soundOutputListener: Flow trigger sound output changed`);
+          this._driver.triggerSoundOutputChanged(this, flowValues, {...flowValues});
+        }
       }
     });
+  }
+
+  legacyDisplayWriter(id) {
+    let reported;
+    try {
+      if (!this.hasCapability(id)) return undefined;
+      reported = this.getCapabilityValue(id);
+    } catch (error) {
+      this.error('state report: legacy display setup', id, error);
+      return undefined;
+    }
+    let pending = null;
+    let writing = false;
+
+    const drain = async () => {
+      writing = true;
+      try {
+        while (pending !== null) {
+          const value = pending;
+          pending = null;
+          if (this._channelStopped || value === reported) continue;
+          try {
+            await this.setCapabilityValue(id, value);
+            reported = value;
+          } catch (error) {
+            this.error('state report: legacy display', id, error);
+          }
+        }
+      } finally {
+        writing = false;
+      }
+    };
+
+    return value => {
+      if (this._channelStopped) return;
+      pending = value;
+      if (!writing) void drain();
+    };
   }
 
   /**
    * Listen for changes in channel
    */
-  channelListener(client = this.lgtv, lifecycleGeneration = this.lifecycle.generation) {
-    if (!this.lifecycle.isCurrent(client, this.lgtv, lifecycleGeneration)) return;
-    const generation = this.channelSubscription.begin();
-    if (generation === null) {
-      this.log(`channelListener: Subscription is ${this.channelSubscription.status}; do not create a duplicate`);
-      return;
+  channelListener() {
+    this.log(`channelListener: Called`);
+    if (this._channelStopped) return;
+    const client = this.lgtv;
+    if (!this._channelReport) {
+      this._lastChannelNumber = this.getStoreValue(store.currentChannel);
+      this._channelReport = new ChannelReport({
+        write: value => this.hasCapability(CHANNEL_CAPABILITY)
+          ? this.setCapabilityValue(CHANNEL_CAPABILITY, value) : Promise.resolve(),
+        error: error => this.error('state report: Channel', error),
+        onChannel: channel => this.reportChannel(channel),
+        initialValue: this.getCapabilityValue(CHANNEL_CAPABILITY),
+        writeLegacy: this.legacyDisplayWriter('webos_display.channel'),
+        setTimer: (callback, delay) => this.homey.setTimeout(callback, delay),
+        clearTimer: timer => this.homey.clearTimeout(timer),
+      });
     }
-    this.log(`channelListener: Start attempt ${this.channelSubscription.attempts}`);
-    this._channelListener((newChannel) => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, lifecycleGeneration)) return;
-      if (!this.channelSubscription.succeed(generation)) {
-        this.log(`channelListener: Ignore stale channel subscription callback`);
-        return;
-      }
-      this.clearChannelRetry();
+    if (this._channelReportClient) {
+      this._channelReportClient.removeListener('close', this._channelClose);
+    }
+    this._channelReportClient = client;
+    this._channelReport.bind(
+      callback => this._channelListener(
+        value => callback(null, value), error => callback(error), client),
+      () => !this._channelStopped && this.lgtv === client,
+    );
+    this._channelClose = () => {
+      if (this._channelReportClient === client) this._channelReport.stop();
+    };
+    client.on('close', this._channelClose);
+  }
+
+  // Only the new channel timer/subscription is disposed; Max's other resources
+  // and reconnection behaviour are not changed by this repair.
+  stopChannelReport() {
+    if (this._channelReport) this._channelReport.stop();
+    if (this._channelReportClient) {
+      this._channelReportClient.removeListener('close', this._channelClose);
+      this._channelReportClient = null;
+    }
+  }
+
+  _connect() {
+    this.stopChannelReport();
+    return super._connect();
+  }
+
+  onUninit() {
+    this._channelStopped = true;
+    this.stopChannelReport();
+  }
+
+  onDeleted() {
+    this._channelStopped = true;
+    this.stopChannelReport();
+  }
+
+  reportChannel(newChannel) {
       if (!this.checkOnOff(newChannel)) {
         return;
       }
-      this.reportBackground(
-        this.applyChannelObservation(newChannel, 'channelListener'),
-        'channelListener: Could not apply channel information',
-      );
-      this.scheduleChannelReconciliation(client, lifecycleGeneration);
-    }, (error) => {
-      if (!this.lifecycle.isCurrent(client, this.lgtv, lifecycleGeneration)) return;
-      if (!this.channelSubscription.fail(generation)) {
-        return;
+      const oldChannel = this._lastChannelNumber;
+      this.log(`channelListener: Channel changed from ${oldChannel} to ${newChannel.channelName}`);
+
+      if (`${newChannel.channelNumber}` !== `${oldChannel}`) {
+        // A duplicate report can arrive before the asynchronous store write.
+        this._lastChannelNumber = newChannel.channelNumber;
+        this.log(`channelListener: Set Store ${store.currentChannel} to '${newChannel.channelNumber}'`);
+        this.setStoreValue(store.currentChannel, `${newChannel.channelNumber}`)
+          .catch(error => this.error('state report: channel store', error));
+
+        const previousChannel = this._flowStringToken('oldChannel', oldChannel, {
+          allowAbsent: true,
+          allowFiniteNumber: true
+        });
+        const currentChannel = this._flowStringToken('newChannel', newChannel.channelNumber, {
+          allowFiniteNumber: true
+        });
+        if (previousChannel.valid && currentChannel.valid) {
+          const flowValues = {
+            oldChannel: previousChannel.value,
+            newChannel: currentChannel.value
+          };
+          this.log(`soundOutputListener: Flow trigger channel changed`);
+          this._driver.triggerChannelChanged(this, flowValues, {...flowValues});
+        }
       }
-      this.error(`channelListener: Subscription attempt failed`, error);
-      this.scheduleChannelRetry(client, lifecycleGeneration);
-    });
-  }
-
-  clearChannelRetry() {
-    if (this.channelRetryTimeout) {
-      clearTimeout(this.channelRetryTimeout);
-      this.channelRetryTimeout = null;
-    }
-  }
-
-  resetChannelSubscription() {
-    this.clearChannelRetry();
-    if (this.channelSubscription) {
-      this.channelSubscription.reset();
-    }
-  }
-
-  clearChannelReconciliation() {
-    if (this.channelReconcileTimeout) {
-      clearTimeout(this.channelReconcileTimeout);
-      this.channelReconcileTimeout = null;
-    }
-  }
-
-  scheduleChannelReconciliation(client = this.lgtv, generation = this.lifecycle.generation) {
-    this.clearChannelReconciliation();
-    if (this.currentForegroundApp !== 'com.webos.app.livetv'
-      || !this.lifecycle.isCurrent(client, this.lgtv, generation)) {
-      return;
-    }
-    this.channelReconcileTimeout = setTimeout(() => {
-      this.channelReconcileTimeout = null;
-      this.runChannelReconciliation(client, generation)
-        .catch(error => this.error('channelReconciliation: Unexpected failure', error));
-    }, CHANNEL_RECONCILE_INTERVAL_MS);
-  }
-
-  async runChannelReconciliation(client = this.lgtv, generation = this.lifecycle.generation) {
-    if (this.channelReconcileRunning
-      || this.currentForegroundApp !== 'com.webos.app.livetv'
-      || !this.lifecycle.isCurrent(client, this.lgtv, generation)) {
-      return;
-    }
-    this.channelReconcileRunning = true;
-    try {
-      const channel = await this._channelCurrent();
-      if (!this.lifecycle.isCurrent(client, this.lgtv, generation)
-        || this.currentForegroundApp !== 'com.webos.app.livetv') {
-        return;
-      }
-      await this.applyChannelObservation(channel, 'channelReconciliation');
-    } catch (error) {
-      this.error('channelReconciliation: Could not reconcile Live TV channel', error);
-    } finally {
-      this.channelReconcileRunning = false;
-      if (this.currentForegroundApp === 'com.webos.app.livetv'
-        && this.lifecycle.isCurrent(client, this.lgtv, generation)) {
-        this.scheduleChannelReconciliation(client, generation);
-      }
-    }
-  }
-
-  async applyChannelObservation(newChannel, caller = 'channelObservation') {
-    return this.channelObservationQueue.run(
-      () => this._applyChannelObservation(newChannel, caller),
-    );
-  }
-
-  async _applyChannelObservation(newChannel, caller = 'channelObservation') {
-    if (!newChannel || newChannel.channelNumber === null || newChannel.channelNumber === undefined) {
-      throw new Error(`${caller}: LG returned no channel number`);
-    }
-    const nextChannel = channelNumber(newChannel.channelNumber);
-    const previousChannel = this.channelObservation.current;
-    const channelDisplay = this._formatChannelDisplay(newChannel.channelNumber, newChannel.channelName);
-    this.log(`${caller}: Channel changed from ${previousChannel} to ${newChannel.channelName}`);
-    this.log(`${caller}: Set capability ${capabilities.displayChannel} to '${channelDisplay}'`);
-    await this.setCapabilityValue(capabilities.displayChannel, channelDisplay);
-
-    if (nextChannel === previousChannel) {
-      return false;
-    }
-
-    this.log(`${caller}: Set Store ${store.currentChannel} to '${nextChannel}'`);
-    await this.setStoreValue(store.currentChannel, nextChannel);
-    const observation = this.channelObservation.observe(nextChannel);
-    this.log(`${caller}: Flow trigger channel changed`);
-    await this._driver.triggerChannelChanged(this, {
-      oldChannel: observation.previous,
-      newChannel: observation.current,
-    }, {
-      oldChannel: observation.previous,
-      newChannel: observation.current,
-    });
-    return true;
-  }
-
-  async changeChannelVerified(requestedChannel) {
-    const client = this.lgtv;
-    const generation = this.lifecycle.generation;
-    const channel = await verifyChannelSelection({
-      requestedChannel,
-      setChannel: channelNumber => this._channelSet(channelNumber),
-      getCurrentChannel: () => this._channelCurrent(),
-      isCurrent: () => this.lifecycle.isCurrent(client, this.lgtv, generation),
-    });
-    if (!this.lifecycle.isCurrent(client, this.lgtv, generation)) {
-      throw new Error('Channel verification was cancelled because the television connection changed');
-    }
-    await this.applyChannelObservation(channel, 'changeChannelVerified');
-    this.scheduleChannelReconciliation(client, generation);
-    return channel;
-  }
-
-  scheduleChannelRetry(client = this.lgtv, generation = this.lifecycle.generation) {
-    this.clearChannelRetry();
-    if (this.currentForegroundApp !== 'com.webos.app.livetv' || !this.channelSubscription.canRetry()) {
-      return;
-    }
-    const delay = this.channelSubscription.attempts * 1000;
-    this.log(`channelListener: Retry failed Live TV subscription in ${delay} ms`);
-    this.channelRetryTimeout = setTimeout(() => {
-      this.channelRetryTimeout = null;
-      if (this.currentForegroundApp === 'com.webos.app.livetv'
-        && this.lifecycle.isCurrent(client, this.lgtv, generation)) {
-        this.channelListener(client, generation);
-      }
-    }, delay);
   }
 
   /**
@@ -844,14 +690,18 @@ class WebosPlusDevice extends WebOSTV {
     this.log(`toggleOnOff: Called`, value);
     if (value) {
       this.log(`toggleOnOff: Try to turn the tv on`);
-      await this._turnOn();
-      this.log(`toggleOnOff: TV turn-on command succeeded. Set capability ${capabilities.onOff} to ${value}`);
-      await this.setCapabilityValue(capabilities.onOff, true);
+      const on = await this._turnOn().catch(this.error);
+      if (on) {
+        this.log(`toggleOnOff: TV turned on. Set capability ${capabilities.onOff} to ${value}`);
+        this.setCapabilityValue(capabilities.onOff, true);
+      }
     } else {
       this.log(`toggleOnOff: Try to turn the tv off`);
-      await this._turnOff();
-      this.log(`toggleOnOff: TV turn-off command succeeded. Set capability ${capabilities.onOff} to ${value}`);
-      await this.setCapabilityValue(capabilities.onOff, false);
+      const off = this._turnOff().catch(this.error);
+      if (off) {
+        this.log(`toggleOnOff: TV turned off. Set capability ${capabilities.onOff} to ${value}`);
+        this.setCapabilityValue(capabilities.onOff, false);
+      }
     }
   }
 
@@ -863,13 +713,11 @@ class WebosPlusDevice extends WebOSTV {
    */
   async volumeSet(value) {
     this.log(`volumeSet: Called`, value);
-    const lgVolume = homeyVolumeToLg(value);
-    this.log(`volumeSet: Try to set the LG volume to ${lgVolume}`);
-    const newVolume = await this._volumeSet(lgVolume);
-    if (newVolume) {
-      this.log(`volumeSet: Volume set. Set capability ${capabilities.volumeSet} to ${value}`);
-      await this.setCapabilityValue(capabilities.volumeSet, lgVolumeToHomey(newVolume.volume));
-    }
+    const lgVolume = toLgVolume(value);
+    this.log(`volumeSet: Try to set LG volume to ${lgVolume}`);
+    // An acknowledgement is not a measured level, especially with external audio.
+    // Let command failures reach Homey; volumeListener publishes actual reports.
+    await this._volumeSet(lgVolume);
   }
 
   /**
@@ -884,7 +732,7 @@ class WebosPlusDevice extends WebOSTV {
     const response = await this._volumeMute(value);
     if (response) {
       this.log(`volumeMute: Mute set. Set capability ${capabilities.volumeMute} to ${value}`);
-      await this.setCapabilityValue(capabilities.volumeMute, response.muted);
+      this.setCapabilityValue(capabilities.volumeMute, response.muted);
     }
   }
 
@@ -895,14 +743,8 @@ class WebosPlusDevice extends WebOSTV {
    */
   async volumeUp() {
     this.log(`volumeUp: Called`);
-    const volume = this.getCapabilityValue(capabilities.volumeSet);
-    this.log(`volumeUp: Current volume ${volume}. Try to increase the volume`);
-    const response = await this._volumeUp();
-    if (response) {
-      const nextVolume = Math.min((volume || 0) + 0.01, 1);
-      this.log(`volumeUp: Volume increased. Set capability ${capabilities.volumeSet} to ${nextVolume}`);
-      await this.setCapabilityValue(capabilities.volumeSet, nextVolume);
-    }
+    // The step size/result depends on the audio output; wait for its numeric report.
+    await this._volumeUp();
   };
 
   /**
@@ -911,14 +753,7 @@ class WebosPlusDevice extends WebOSTV {
    */
   async volumeDown() {
     this.log(`volumeDown: Called`);
-    const volume = this.getCapabilityValue(capabilities.volumeSet);
-    this.log(`volumeDown: Current volume ${volume}. Try to decrease the volume`);
-    const response = await this._volumeDown();
-    if (response) {
-      const nextVolume = Math.max((volume || 0) - 0.01, 0);
-      this.log(`volumeDown: Volume decreased. Set capability ${capabilities.volumeSet} to ${nextVolume}`);
-      await this.setCapabilityValue(capabilities.volumeSet, nextVolume);
-    }
+    await this._volumeDown();
   }
 
   /**
@@ -928,16 +763,25 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<*[]>}
    */
   async filteredAppList(query = '') {
+    const device = this;
     this.log(`filteredAppList: Called`, query);
-    this.log(`filteredAppList: Retrieve user launch points and required television apps`);
-    const [launchPoints, allApps] = await Promise.all([
-      this._appListLaunchPoints(),
-      this._appList(),
-    ]);
-    const choices = buildLaunchableAppList(launchPoints, allApps);
-    const filtered = filterLaunchableApps(choices, query);
-    this.log(`filteredAppList: Filtered user-facing result`, filtered);
-    return filtered;
+
+    function _filter(list, query) {
+      device.log(`filteredAppList: Filter list with query '${query}'`, list);
+      let tmp = list.filter(app => app.name.toLowerCase().includes(query.toLowerCase()));
+      device.log(`filteredAppList: Filter sort result by name`, tmp);
+      return tmp.sort((a, b) => {
+        return a.name.toLowerCase() > b.name.toLowerCase() ? 1 : b.name.toLowerCase() > a.name.toLowerCase() ? -1 : 0;
+      });
+    }
+
+    this.log(`filteredAppList: try to get all apps/inputs`);
+    const list = await this._appList().catch(this.error);
+    if (!list) {
+      this.error(`filteredAppList: No apps/inputs found! Return empty array`);
+      return [];
+    }
+    return _filter(list, query);
   }
 
   /**
@@ -960,7 +804,11 @@ class WebosPlusDevice extends WebOSTV {
     }
 
     this.log(`filteredExternalInputList: try to get all external inputs`);
-    const list = await this._externalInputList();
+    const list = await this._externalInputList().catch(this.error);
+    if (!list) {
+      this.error(`filteredExternalInputList: No external inputs found! Return empty array`);
+      return [];
+    }
     return _filter(list, query);
   }
 
@@ -986,27 +834,29 @@ class WebosPlusDevice extends WebOSTV {
     }
 
     this.log(`filteredChannelList: try to get all channels`);
-    const list = await this._channelList();
+    const list = await this._channelList().catch(this.error);
+    if (!list) {
+      this.error(`filteredChannelList: No channels found! Return empty array`);
+      return [];
+    }
     return _filter(list, query);
   }
 
   /**
-   * Format the channel display
+   * Format the speaker track
    *
    * @param {string|number} number The channel number
    * @param {string} name The channel name
    * @returns {string}
    * @private
    */
-  _formatChannelDisplay(number, name) {
-    let channelDisplay = number ? `${number}` : '';
+  _formatSpeakerTrack(number, name) {
+    let track = number ? `${number}` : '';
 
     if (name) {
-      channelDisplay = channelDisplay && channelDisplay.length > 0
-        ? `${channelDisplay} | ${name}`
-        : `${name};`
+      track = track && track.length > 0 ? `${track} | ${name}` : `${name};`
     }
-    return channelDisplay;
+    return track;
   };
 }
 

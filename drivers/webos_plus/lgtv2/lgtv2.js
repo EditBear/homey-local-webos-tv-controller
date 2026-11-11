@@ -1,326 +1,187 @@
-/**
- *      Lgtv2 - Simple Node.js module to remote control LG WebOS smart TVs
- *
- *      MIT (c) Sebastian Raff <hq@ccu.io> (https://github.com/hobbyquaker)
- *      this is a fork of https://github.com/msloth/lgtv.js, heavily modified and rewritten to suite my needs.
- *
- */
+'use strict';
 
-var EventEmitter = require('events').EventEmitter;
-var util = require('util');
-var WebSocketClient = require('websocket').client;
-var createPairingPayload = require('./pairing-payload').createPairingPayload;
-var requestState = require('./request-state');
-var CallbackRegistry = requestState.CallbackRegistry;
-var createCorrelationIdFactory = requestState.createCorrelationIdFactory;
-var ReconnectState = require('./reconnect-state');
-var specializedSocket = require('./specialized-socket');
-var SpecializedSocket = specializedSocket.SpecializedSocket;
-var SpecializedSocketPool = specializedSocket.SpecializedSocketPool;
-// var ppath = require('persist-path');
-// var mkdirp = require('mkdirp');
+const { EventEmitter } = require('node:events');
+const UpstreamLGTV = require('lgtv2');
+const pairing = require('./pairing.json');
+const openButtonSocket = require('./button-socket');
 
-var LGTV = function (config) {
-  if (!(this instanceof LGTV)) {
-    return new LGTV(config);
-  }
-  var that = this;
+function lgFailure(reply) {
+  const payload = reply.payload || {};
+  const detail = reply.type === 'error'
+    ? reply.error || payload.errorText || 'LG returned an error response'
+    : payload.errorText || (payload.returnValue === false
+      ? 'LG response reported failure' : 'LG response did not include a payload');
+  const error = new Error(detail);
+  error.isLGResponseFailure = true;
+  error.lgResponseType = reply.type;
+  if (reply.error !== undefined) error.lgError = reply.error;
+  const code = reply.errorCode ?? payload.errorCode;
+  if (code !== undefined) error.code = error.lgErrorCode = code;
+  return error;
+}
 
-  config = config || {};
-  config.url = config.url || 'ws://lgwebostv:3000';
-  config.timeout = config.timeout || 15000;
-  config.registrationTimeout = config.registrationTimeout || 60000;
-  config.reconnect = typeof config.reconnect === 'undefined' ? 5000 : config.reconnect;
-  that.clientKey = config.clientKey || null;
+function legacySubscriptionPayload(payload) {
+  if (!payload?.subscribed) return payload;
+  const reported = ['muted', 'volume'].filter(name => payload[name] !== undefined);
+  return reported.length
+    ? { ...payload, changed: [...new Set([...(Array.isArray(payload.changed) ? payload.changed : []), ...reported])] }
+    : payload;
+}
 
-  that.saveKey = config.saveKey || function (key, cb) {
-    that.clientKey = key;
-    cb(null);
-  };
+// Keep the accepted Homey-facing API while delegating the main connection,
+// reconnects, registration and SSAP request dispatch to unmodified lgtv2.
+module.exports = function createLGTV(options) {
+  const client = new EventEmitter();
+  const operations = new Map();
+  const closeButtons = new Set();
+  const timeout = options.timeout ?? 15000;
+  let ready = false;
+  let retired = false;
+  let session = 0;
+  let persisted = Promise.resolve(true);
 
-  var client = new WebSocketClient();
-  var connection = {};
-  var isPaired = false;
-  var reconnectState = new ReconnectState(config.reconnect);
-  var startupTimer = null;
-
-  var specializedSocketPool = new SpecializedSocketPool(config.timeout);
-
-  var cidPrefix = ('0000000' + (Math.floor(Math.random() * 0xFFFFFFFF).toString(16))).slice(-8);
-  var getCid = createCorrelationIdFactory(cidPrefix);
-  var callbackRegistry = new CallbackRegistry();
-
-  var pairingTemplate = require('./pairing.json');
-
-  var lastError;
-
-  client.on('connectFailed', function (error) {
-    reconnectState.connectionSettled();
-    if (lastError !== error.toString()) {
-      that.emit('error', error);
-    }
-    lastError = error.toString();
-
-	switch (error.code) {
-		case 'ECONNRESET':
-			config.newurl = new URL(config.url);
-			config.newurl.port = (config.newurl.port === '3000') ? '3001' : '3000';
-			config.newurl.protocol = (config.newurl.protocol === 'ws:') ? 'wss:' : 'ws:';
-			config.url = config.newurl.href;
-			delete config.newurl;
-			break;
-		default:
-			break;
-	}
-
-    reconnectState.schedule(function () {
-      that.connect(config.url);
-    });
+  const upstream = new UpstreamLGTV({
+    url: options.url,
+    host: options.host,
+    timeout,
+    reconnect: options.reconnect,
+    handshakeTimeout: options.handshakeTimeout,
+    keepalive: options.keepalive ?? true,
+    ...(options.keepaliveInterval === undefined ? {} : { keepaliveInterval: options.keepaliveInterval }),
+    ...(options.keepaliveGracePeriod === undefined ? {} : { keepaliveGracePeriod: options.keepaliveGracePeriod }),
+    clientKey: options.clientKey ?? null,
+    learnMac: false,
+    rejectUnauthorized: false,
+    wsOptions: { agent: false, perMessageDeflate: false, maxPayload: 8 * 1024 * 1024 },
+    saveKey(key, done) {
+      persisted = new Promise(resolve => {
+        if (retired) {
+          resolve(false);
+          return;
+        }
+        const complete = error => {
+          resolve(!error);
+          if (!retired) done(error);
+        };
+        try { options.saveKey(key, complete); } catch (error) { complete(error); }
+      });
+    },
   });
 
-  client.on('connect', function (conn) {
-    if (reconnectState.stopped) {
-      conn.close();
+  Object.defineProperty(client, 'clientKey', {
+    get: () => upstream.clientKey,
+    set: key => { upstream.clientKey = key; },
+  });
+
+  // Preserve the approved signed permissions. Upstream's internal unsigned
+  // fallback would otherwise widen this private test to unaccepted webOS 26 pairing.
+  const send = upstream.send.bind(upstream);
+  let rejectedRegistration;
+  upstream.send = (type, uri, payload, callback) => {
+    if (type !== 'register') return send(type, uri, payload, callback);
+    if (!payload?.manifest?.signed) {
+      callback(rejectedRegistration || new Error('LG refused signed registration'));
       return;
     }
-    reconnectState.connected();
-    connection = conn;
-
-    connection.on('error', function (error) {
-      that.emit('error', error);
+    rejectedRegistration = undefined;
+    const approved = JSON.parse(JSON.stringify(pairing));
+    if (payload['client-key']) approved['client-key'] = payload['client-key'];
+    return send(type, uri, approved, (error, result) => {
+      rejectedRegistration = error;
+      callback(error, result);
     });
+  };
 
-    connection.on('close', function (e) {
-      connection = {};
-      callbackRegistry.failAll(new Error('connection closed'));
-
-      that.emit('close', e);
-      reconnectState.schedule(function () {
-        that.connect(config.url);
-      });
-    });
-
-    connection.on('message', function (message) {
-      var parsedMessage;
-      if (message.type === 'utf8') {
-        if (message.utf8Data) {
-          try {
-            parsedMessage = JSON.parse(message.utf8Data);
-          } catch (err) {
-            that.emit('error', new Error('JSON parse error ' + message.utf8Data));
-          }
-        }
-        if (parsedMessage) {
-          if (parsedMessage.payload && parsedMessage.payload.subscribed) {
-            // Set changed array on first response to subscription
-            if (typeof parsedMessage.payload.muted !== 'undefined') {
-              if (parsedMessage.payload.changed) {
-                parsedMessage.payload.changed.push('muted');
-              } else {
-                parsedMessage.payload.changed = ['muted'];
-              }
-            }
-            if (typeof parsedMessage.payload.volume !== 'undefined') {
-              if (parsedMessage.payload.changed) {
-                parsedMessage.payload.changed.push('volume');
-              } else {
-                parsedMessage.payload.changed = ['volume'];
-              }
-            }
-          }
-          callbackRegistry.dispatch(parsedMessage.id, null, parsedMessage.payload);
-        }
-      } else {
-        that.emit('error', new Error('received non utf8 message ' + message.toString()));
-      }
-    });
-
-    isPaired = false;
-
-    that.register();
+  upstream.on('message', text => {
+    try {
+      const reply = JSON.parse(text);
+      const operation = operations.get(reply?.id);
+      if (operation) operation.reply = reply;
+    } catch {
+      // Upstream reports the parse failure. Never forward the raw frame to logs.
+    }
+  });
+  upstream.on('error', error => {
+    if (retired) return;
+    client.emit('error', error.message?.startsWith('JSON parse error ')
+      ? new Error('LG sent a malformed JSON response') : error);
+  });
+  upstream.on('prompt', () => { if (!retired) client.emit('prompt'); });
+  upstream.on('connect', async () => {
+    const current = ++session;
+    const saved = await persisted;
+    if (retired || current !== session || !upstream.connected) return;
+    if (saved) {
+      ready = true;
+      client.emit('connect');
+    }
   });
 
-  this.register = function () {
-    var pairing = createPairingPayload(pairingTemplate, that.clientKey);
+  function clearConnection() {
+    ++session;
+    ready = false;
+    operations.clear();
+    for (const close of closeButtons) close();
+    closeButtons.clear();
+  }
 
-    that.send('register', undefined, pairing, function (err, res) {
-      if (!err && res) {
-        if (res['client-key']) {
-          that.clientKey = res['client-key'];
-          that.saveKey(res['client-key'], function (err) {
-            if (err) {
-              that.emit('error', err);
-              return;
-            }
-            isPaired = true;
-            that.emit('connect');
-          });
-        } else {
-          that.emit('prompt');
-        }
-      } else {
-        that.emit('error', err);
-      }
-    });
-  };
+  upstream.on('close', close => {
+    clearConnection();
+    if (!retired) client.emit('close', close.code);
+  });
 
-  this.request = function (uri, payload, cb) {
-    this.send('request', uri, payload, cb);
-  };
-
-  this.subscribe = function (uri, payload, cb) {
-    this.send('subscribe', uri, payload, cb);
-  };
-
-  this.send = function (type, uri, /* optional */ payload, /* optional */ cb) {
+  function issue(kind, uri, payload, callback, playback = false) {
     if (typeof payload === 'function') {
-      cb = payload;
+      callback = payload;
       payload = {};
     }
-
-    if (!connection.connected) {
-      if (typeof cb === 'function') {
-        cb(new Error('not connected'));
-      }
+    if (retired || !ready || !upstream.connected) {
+      callback(new Error('not connected'));
       return;
     }
-
-    var cid = getCid();
-
-    var json = JSON.stringify({
-      id: cid,
-      type: type,
-      uri: uri,
-      payload: payload
+    const operation = {};
+    const id = upstream[kind](uri, payload, (error, result) => {
+      if (kind === 'request') operations.delete(operation.id);
+      if (retired) {
+        if (kind === 'request') callback(new Error('TV connection retired'));
+        return;
+      }
+      const reply = operation.reply;
+      operation.reply = undefined;
+      if (!reply) return callback(error, result);
+      if (playback) return callback(null, reply.payload, reply);
+      if (reply.type === 'error' || reply.payload == null || reply.payload.returnValue === false) {
+        return callback(lgFailure(reply));
+      }
+      // A nested volume report must keep SOURCEID3's reporting-only behavior.
+      callback(null, kind === 'subscribe' ? legacySubscriptionPayload(reply.payload) : reply.payload);
     });
+    operation.id = id;
+    if (id) operations.set(id, operation);
+    return id;
+  }
 
-    if (typeof cb === 'function') {
-      switch (type) {
-        case 'request':
-          callbackRegistry.addOneShot(cid, cb, config.timeout, 'request');
-          break;
-
-        case 'subscribe':
-          callbackRegistry.addPersistent(cid, cb);
-          break;
-
-        case 'register':
-          callbackRegistry.addUntil(
-            cid,
-            cb,
-            config.registrationTimeout,
-            'registration',
-            function (err, res) {
-              return Boolean(err || (res && res['client-key']));
-            }
-          );
-          break;
-        default:
-          throw new Error('unknown type');
-      }
-    }
-    try {
-      connection.send(json);
-    } catch (error) {
-      callbackRegistry.remove(cid);
-      if (typeof cb === 'function') {
-        cb(error);
-      }
-    }
+  client.request = (uri, payload, callback) => { issue('request', uri, payload, callback); };
+  client.requestPlayback = (uri, callback) => { issue('request', uri, {}, callback, true); };
+  client.subscribe = (uri, payload, callback) => { issue('subscribe', uri, payload, callback); };
+  client.subscribeWithCancel = (uri, callback) => {
+    const id = issue('subscribe', uri, callback);
+    return () => {
+      if (operations.delete(id)) upstream.unsubscribe(id);
+    };
   };
-
-  this.getSocket = function (url, cb) {
-    specializedSocketPool.acquire(url, function (complete) {
-      that.request(url, function (err, data) {
-        if (err) {
-          complete(err);
-          return;
-        }
-        if (!data || typeof data.socketPath !== 'string' || data.socketPath.length === 0) {
-          complete(new Error('invalid specialized socket path'));
-          return;
-        }
-
-        var special = new WebSocketClient();
-        special
-          .on('connect', function (conn) {
-            var socket = new SpecializedSocket(conn, function () {
-              specializedSocketPool.remove(url, socket);
-            });
-            conn
-              .on('error', function (error) {
-                that.emit('error', error);
-              })
-              .on('close', function () {
-                socket.markClosed();
-              });
-
-            if (!complete(null, socket)) {
-              socket.close();
-            }
-          })
-          .on('connectFailed', function (error) {
-            complete(error);
-            that.emit('error', error);
-          });
-
-        try {
-          special.connect(data.socketPath, null, null, null, {rejectUnauthorized: false});
-        } catch (error) {
-          complete(error);
-        }
-      });
-    }).then(
-      socket => cb(null, socket),
-      error => cb(error),
-    );
+  client.getSocket = (uri, callback) => {
+    const current = session;
+    client.request(uri, (error, result) => {
+      if (error) return callback(error);
+      if (current !== session || !ready) return callback(new Error('TV connection changed during button setup'));
+      openButtonSocket(result?.socketPath, timeout, closeButtons, callback);
+    });
   };
-
-  /**
-   *      Connect to TV using a websocket url (eg "ws://192.168.0.100:3000")
-   *
-   */
-  this.connect = function (host) {
-    reconnectState.start();
-
-    if (connection.connected && !isPaired) {
-      that.register();
-    } else if (!connection.connected && reconnectState.beginConnection()) {
-      that.emit('connecting', host);
-      connection = {};
-      try {
-        client.connect(host, null, null, null, { rejectUnauthorized: false });
-      } catch (error) {
-        reconnectState.connectionSettled();
-        that.emit('error', error);
-        reconnectState.schedule(function () {
-          that.connect(config.url);
-        });
-      }
-    }
+  client.disconnect = () => {
+    retired = true;
+    clearConnection();
+    return upstream.disconnect();
   };
-
-  this.disconnect = function () {
-    reconnectState.stop();
-    if (startupTimer) {
-      clearTimeout(startupTimer);
-      startupTimer = null;
-    }
-    if (connection && connection.close) {
-      connection.close();
-    }
-
-    specializedSocketPool.closeAll(new Error('client disconnected'));
-  };
-
-  startupTimer = setTimeout(function () {
-    startupTimer = null;
-    if (!reconnectState.stopped) {
-      that.connect(config.url);
-    }
-  }, 0);
+  return client;
 };
-
-util.inherits(LGTV, EventEmitter);
-
-module.exports = LGTV;

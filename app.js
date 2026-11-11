@@ -1,7 +1,6 @@
 /*
  * LG WebOS TV app for Homey
  * Copyright (C) 2020  Max van de Laar
- * Modifications Copyright (C) 2026  John Bear
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +23,7 @@ const Homey = require('homey');
 class WebosPlus extends Homey.App {
 
   onInit() {
-    this.log('Local webOS TV Controller is running...');
+    this.log('WebOS Plus is running...');
   }
 }
 
