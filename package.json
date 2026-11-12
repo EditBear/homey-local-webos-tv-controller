@@ -1,6 +1,6 @@
 {
   "name": "com.rompa.webos-plus-g4",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Local LG webOS TV control and Flow integration for Homey",
   "main": "app.js",
   "author": "John Bear",

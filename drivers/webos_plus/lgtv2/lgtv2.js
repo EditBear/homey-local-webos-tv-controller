@@ -29,7 +29,7 @@ function legacySubscriptionPayload(payload) {
 }
 
 // Keep the accepted Homey-facing API while delegating the main connection,
-// reconnects, registration and SSAP request dispatch to unmodified lgtv2.
+// reconnects, registration and SSAP request dispatch to lgtv2.
 module.exports = function createLGTV(options) {
   const client = new EventEmitter();
   const operations = new Map();
@@ -39,6 +39,7 @@ module.exports = function createLGTV(options) {
   let retired = false;
   let session = 0;
   let persisted = Promise.resolve(true);
+  let savedClientKey = options.clientKey ?? null;
 
   const upstream = new UpstreamLGTV({
     url: options.url,
@@ -60,6 +61,7 @@ module.exports = function createLGTV(options) {
           return;
         }
         const complete = error => {
+          if (!error && !retired) savedClientKey = key;
           resolve(!error);
           if (!retired) done(error);
         };
@@ -162,6 +164,9 @@ module.exports = function createLGTV(options) {
   }
 
   client.request = (uri, payload, callback) => { issue('request', uri, payload, callback); };
+  client.advanceReconnect = address => !retired && address === options.host &&
+    typeof savedClientKey === 'string' && savedClientKey.length > 0 &&
+    upstream.clientKey === savedClientKey && (upstream.advanceReconnect?.() ?? false);
   client.requestPlayback = (uri, callback) => { issue('request', uri, {}, callback, true); };
   client.subscribe = (uri, payload, callback) => { issue('subscribe', uri, payload, callback); };
   client.subscribeWithCancel = (uri, callback) => {

@@ -1,6 +1,8 @@
-# Local webOS TV Controller 2.0.0
+# Local webOS TV Controller 2.0.1
 
 Local webOS TV Controller provides local LG webOS control, source and channel reporting, and Flow cards for TV commands. The source-reported trigger provides the raw source ID and report time, including fresh reports of the same source. Use Request current TV source to ask a connected TV for its current source.
+
+The TV was confirmed on supplies the time of an LG Active report to Flows using the power listener. Use it to sequence wake-to-input Flows.
 
 Use the explicit Play, Pause, Fast Forward and Rewind cards for playback. Existing Flows can keep the deprecated Toggle Play/Pause card. Toggle follows the last acknowledged Homey Play or Pause and starts with Play when there is no reliable history. The TV remote can change playback independently.
 
@@ -17,17 +19,20 @@ Original contributor credits, copyright notices and GPL-3.0-or-later licence are
 
 ## Test release and source history
 
-This repository contains the source for **Homey Test 2.0.0, Build 11**. See the [full changelog](CHANGELOG-2.0.0.md) for the changes from Max’s original WebOS Plus, the earlier fork history and the release checks. [Homey Test page](https://homey.app/a/com.rompa.webos-plus-g4/test/) · [Homey Community thread](https://community.homey.app/t/lg-webos-better-integration/15007/552)
+This repository contains the source for **Homey Test 2.0.1, Build 12**. The release notes explain the confirmed wake trigger, the shutdown power report fix and the changes to rediscovery. [2.0.1 changelog](CHANGELOG-2.0.1.md) · [Homey Test](https://homey.app/a/com.rompa.webos-plus-g4/test/)
+
+Tag `v2.0.0` preserves Homey Test Build 11, and tag `v1.0.43` preserves the earlier Store release source. [Earlier changelog](CHANGELOG-2.0.0.md) · [Homey Community thread](https://community.homey.app/t/lg-webos-better-integration/15007/552)
 
 Contributions and offers to maintain the app are welcome. [Contributing](CONTRIBUTING.md) · [Maintainers](MAINTAINERSHIP.md)
 
 ## Build and test
 
-Use Node.js 22.12 or later in the 22 series, or Node.js 24 or newer, with npm. Install the locked runtime dependencies and run the offline tests before building. The launcher uses Homey CLI 4.4.1, the version used to build the Test release.
+Use Node.js 22.12 or later in the 22 series, or Node.js 24 or newer, with npm. Apply the bundled reconnect patch after each `npm ci`. The script checks the pinned upstream dependency and verifies that its output matches Test Build 12. The launcher uses Homey CLI 4.4.1.
 
 ```sh
 npm ci --omit=dev
-node --test test/*.test.cjs
+node scripts/apply-lgtv2-patch.cjs
+node --require ./test/offline-barrier.cjs --test test/*.test.cjs
 ./scripts/homey-local app validate --level publish
 ./scripts/homey-local app build
 ```

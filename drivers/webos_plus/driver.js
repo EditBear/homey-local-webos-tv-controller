@@ -59,6 +59,7 @@ class WebosPlusDriver extends Homey.Driver {
       })
 
     this._triggerSourceReported = this.homey.flow.getDeviceTriggerCard('webos_source_reported')
+    this._triggerPowerOnConfirmed = this.homey.flow.getDeviceTriggerCard('webos_power_on_confirmed')
     this._triggerAppChanged = this.homey.flow.getDeviceTriggerCard('webos_app_changed')
     this._triggerAppChangedTo = this.homey.flow.getDeviceTriggerCard('webos_app_changed_to')
       .registerRunListener((args, state) => {
@@ -94,6 +95,10 @@ class WebosPlusDriver extends Homey.Driver {
 
   triggerSourceReported(device, tokens, state) {
     return this._triggerSourceReported.trigger(device, tokens, state)
+  }
+
+  triggerPowerOnConfirmed(device, confirmedAt) {
+    return this._triggerPowerOnConfirmed.trigger(device, {confirmedAt})
   }
 
   triggerAppChanged(device, tokens, state) {

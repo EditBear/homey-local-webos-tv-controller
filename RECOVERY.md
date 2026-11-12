@@ -1,8 +1,9 @@
 # Recovery and local installation
 
 This repository contains the complete public source for Local webOS TV
-Controller. Tag `v2.0.0` identifies the source for Homey Test Build 11. Tag
-`v1.0.43` preserves the earlier Store release source.
+Controller. Tag `v2.0.1` identifies the source for Homey Test Build 12. Tag
+`v2.0.0` identifies Test Build 11, and tag `v1.0.43` preserves the earlier
+Store release source.
 
 ## Requirements
 
@@ -15,7 +16,8 @@ Controller. Tag `v2.0.0` identifies the source for Homey Test Build 11. Tag
 
 ```sh
 npm ci --omit=dev
-node --test test/*.test.cjs
+node scripts/apply-lgtv2-patch.cjs
+node --require ./test/offline-barrier.cjs --test test/*.test.cjs
 ./scripts/homey-local app build
 ./scripts/homey-local login
 ./scripts/homey-local select

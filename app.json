@@ -1,6 +1,6 @@
 {
   "id": "com.rompa.webos-plus-g4",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "compatibility": ">=12.9.0",
   "sdk": 3,
   "name": {
@@ -255,6 +255,39 @@
               "nl": "Gemeld op (epoch ms)"
             },
             "example": 1793051358867
+          }
+        ]
+      },
+      {
+        "id": "webos_power_on_confirmed",
+        "title": {
+          "en": "The TV was confirmed on",
+          "nl": "De tv bevestigde dat hij aan staat"
+        },
+        "titleFormatted": {
+          "en": "The TV was confirmed on",
+          "nl": "De tv bevestigde dat hij aan staat"
+        },
+        "hint": {
+          "en": "When the TV reports that it is active. Requires the power listener.",
+          "nl": "Wanneer de tv meldt dat hij actief is. Vereist de powerlistener."
+        },
+        "args": [
+          {
+            "name": "webosDevice",
+            "type": "device",
+            "filter": "driver_id=webos_plus"
+          }
+        ],
+        "tokens": [
+          {
+            "name": "confirmedAt",
+            "type": "number",
+            "title": {
+              "en": "Confirmed at (epoch ms)",
+              "nl": "Bevestigd op (epoch ms)"
+            },
+            "example": 1794494688414
           }
         ]
       },

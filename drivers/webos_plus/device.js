@@ -65,14 +65,15 @@ class WebosPlusDevice extends WebOSTV {
   }
 
   onDiscoveryResult(discoveryResult) {
-    this.setAvailable();
-    discoveryResult.id = discoveryResult.id.replace(/uuid:/g, '');
-    return discoveryResult.id === this.getData().id;
+    const id = discoveryResult?.id;
+    const deviceId = this.getData()?.id;
+    return Boolean(deviceId) && typeof id === 'string' && id.replace(/uuid:/g, '') === deviceId;
   }
 
   onDiscoveryAvailable(discoveryResult) {
     this.setAvailable();
     const ipAddress = this.getSettings().ipAddress;
+    this.advanceRediscoveryRetry(discoveryResult, ipAddress);
     if (this.getSettings().manualIpAddress === true && ipAddress !== '0.0.0.0'){
       return Promise.resolve(true);
     }
@@ -100,7 +101,20 @@ class WebosPlusDevice extends WebOSTV {
 
   onDiscoveryLastSeenChanged(discoveryResult) {
     this.setAvailable();
+    this.advanceRediscoveryRetry(discoveryResult, this.getSettings().ipAddress);
     return Promise.resolve(true);
+  }
+
+  advanceRediscoveryRetry(discoveryResult, ipAddress) {
+    const id = discoveryResult?.id;
+    const deviceId = this.getData()?.id;
+    if (this._channelStopped || !deviceId || typeof id !== 'string' ||
+        id.replace(/^uuid:/, '') !== deviceId || discoveryResult.address !== ipAddress ||
+        typeof ipAddress !== 'string' || !net.isIP(ipAddress) || ipAddress === '0.0.0.0' || ipAddress === '::') return;
+
+    if (this.lgtv?.advanceReconnect?.(ipAddress)) {
+      this.log('Discovery: brought forward the pending reconnect for the same TV and address');
+    }
   }
 
   /**
@@ -229,6 +243,14 @@ class WebosPlusDevice extends WebOSTV {
       this.log(`powerStateListener: received off`);
       this.setCapabilityValue(capabilities.onOff, false)
         .catch(error => this.error('state report: powerStateListener/off onoff', error));
+    }, async confirmedAt => {
+      if (this._channelStopped || this.getSettings().usePoll) return;
+      this.log('state report: confirmed power ON', confirmedAt);
+      try {
+        await this._driver.triggerPowerOnConfirmed(this, confirmedAt);
+      } catch (error) {
+        this.error('state report: confirmed power ON Flow', error);
+      }
     });
   }
 
@@ -434,14 +456,16 @@ class WebosPlusDevice extends WebOSTV {
         ? report.begin(generation, newAppId) : null;
       const oldAppId = this.getStoreValue(store.currentApp);
       this.log(`appListener: App/input changed from ${oldAppId} to ${newAppId}`);
-      if (!this.checkOnOff(newAppId)) {
+      // LG can report a blank or Home foreground during shutdown. An app ID
+      // is source information, so it must not change the reported power state.
+      if (typeof newAppId !== 'string' || newAppId.trim() === '') {
         return;
       }
 
       // A fresh report is useful even when the source did not change. Reuse
       // the current reporter ticket; do not alter its display/channel work.
       if (nameTicket && client === this.lgtv && generation === report.generation
-        && !this._channelStopped && newAppId.trim() !== '') {
+        && !this._channelStopped) {
         const sourceReport = {source: newAppId, reportedAt};
         // Homey Flow delivery must never delay or interrupt existing reporting.
         try {

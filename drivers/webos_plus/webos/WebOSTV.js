@@ -171,20 +171,30 @@ class WebOSTV extends Homey.Device {
    *
    * @param {Function} handleOn Callback when powered on
    * @param {Function} handleOff Callback when powered off
+   * @param {Function} handleConfirmedOn Callback with the LG reply receipt time
    */
-  _powerStateListener(handleOn, handleOff) {
+  _powerStateListener(handleOn, handleOff, handleConfirmedOn) {
     this.log(`_powerStateListener: Start listening for changes in power state`)
+    const client = this.lgtv
+    let connectionOpen = true
+    client.once('close', () => { connectionOpen = false })
     let timer = null
     let processing = null
     let status = null
     let statusPowerOnReason = null
-    this.lgtv.subscribe(endpoints.powerState, (err, res) => {
+    client.subscribe(endpoints.powerState, (err, res) => {
+      const receivedAt = Date.now()
       const {
         error,
         result,
       } = this._handleResponse(err, res, endpoints.powerState)
       if (error && error.isLGResponseFailure) {
         this.error(error)
+        return
+      }
+      if (!error && ((result.state && typeof result.state !== 'string') ||
+        (result.processing && typeof result.processing !== 'string'))) {
+        this.error('LG power report contained an invalid state or processing value')
         return
       }
       if (timer) {
@@ -205,6 +215,13 @@ class WebOSTV extends Homey.Device {
       status = result.state ? result.state.toLowerCase() : ''
       processing = result.processing ? result.processing.toLowerCase() : null
       statusPowerOnReason = (res && res.powerOnReason ? res.powerOnReason : null)
+
+      // The existing ON/OFF callback also covers screen and transition states.
+      if (connectionOpen && this.lgtv === client && result.returnValue === true &&
+        status === 'active' && (result.processing == null || result.processing === '') &&
+        result.errorCode == null && (result.errorText == null || result.errorText === '')) {
+        handleConfirmedOn(receivedAt)
+      }
 
       this.log(`_powerStateListener: ${ timer ? 'Reset' : 'Set' } timeout to ${ this.getSettings().powerStateTimeout || 2000 } ms and check the state`)
       timer = setTimeout(() => {

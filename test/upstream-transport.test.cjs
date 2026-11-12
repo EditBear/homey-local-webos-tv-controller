@@ -15,7 +15,7 @@ const test = require('node:test');
 const { setImmediate: nextTurn, setTimeout: delay } = require('node:timers/promises');
 const tls = require('node:tls');
 
-const candidate = path.resolve(__dirname, '..');
+const candidate = process.env.HOMEY_TEST_PACKAGE || path.resolve(__dirname, '..');
 const LGTV = require(path.join(candidate, 'drivers/webos_plus/lgtv2/lgtv2.js'));
 const guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 const url = 'wss://127.0.0.1:3001';
@@ -167,6 +167,7 @@ function createClient(t, options = {}) {
   const errors = [];
   const client = new LGTV({
     url,
+    host: '127.0.0.1',
     clientKey: 'fixture-paired-key',
     saveKey: (_key, done) => done(null),
     reconnect: false,
@@ -480,4 +481,133 @@ test('the button socket writes the legacy frame and closes with its main connect
   assert.equal(button.isOpen(), false);
   await assert.rejects(button.send('button', { name: 'BACK' }), /not open/);
   assert.deepEqual(errors, []);
+});
+
+// Hold only the reconnect delay. The WebSocket, upgrade timeout, registration
+// and all other timers use the real installed libraries and fixture wire.
+function holdReconnectTimers(t) {
+  const reconnect = 777;
+  const nativeSetTimeout = global.setTimeout;
+  const nativeClearTimeout = global.clearTimeout;
+  const pending = new Map();
+  let cancelled = 0;
+  t.mock.method(global, 'setTimeout', (callback, duration, ...args) => {
+    if (duration !== reconnect) return nativeSetTimeout(callback, duration, ...args);
+    const timer = {};
+    pending.set(timer, () => callback(...args));
+    return timer;
+  });
+  t.mock.method(global, 'clearTimeout', timer => {
+    if (pending.delete(timer)) cancelled++;
+    else nativeClearTimeout(timer);
+  });
+  return {
+    reconnect,
+    get pending() { return pending.size; },
+    get cancelled() { return cancelled; },
+    fire() {
+      assert.equal(pending.size, 1);
+      const [[timer, callback]] = pending;
+      pending.delete(timer);
+      callback();
+    },
+  };
+}
+
+test('an idle rediscovery consumes the existing timer once until the saved session reconnects', bounds, async t => {
+  const retries = holdReconnectTimers(t);
+  const requests = fixturePeer(t, ['withheld', 'withheld', 'upgraded', 'upgraded']);
+  const { client } = createClient(t, { reconnect: retries.reconnect });
+  assert.equal(client.advanceReconnect('127.0.0.1'), false, 'no retry before the initial socket');
+  await waitFor(() => requests[0], 'initial handshake');
+  assert.equal(client.advanceReconnect('127.0.0.1'), false, 'leave the connecting socket alone');
+
+  await waitFor(() => retries.pending === 1, 'initial retry timer');
+  assert.equal(client.advanceReconnect('127.0.0.2'), false, 'a different address cannot consume the timer');
+  assert.equal(retries.pending, 1);
+  assert.equal(client.advanceReconnect('127.0.0.1'), true);
+  assert.equal(requests.length, 2, 'the next attempt starts without firing the retry timer');
+  assert.equal(retries.pending, 0);
+  assert.equal(retries.cancelled, 1);
+  assert.equal(client.advanceReconnect('127.0.0.1'), false, 'a repeated hint leaves the accelerated socket alone');
+
+  await waitFor(() => retries.pending === 1, 'normal retry after accelerated attempt fails');
+  assert.equal(client.advanceReconnect('127.0.0.1'), false, 'only one advance is allowed during this outage');
+  assert.equal(requests.length, 2);
+  retries.fire();
+
+  const { wire, request } = await registration(requests, 2);
+  assert.equal(client.advanceReconnect('127.0.0.1'), false, 'leave the open socket awaiting registration alone');
+  assert.deepEqual(clientMessages(wire), [request], 'the saved key was offered only once');
+  await finishRegistration(client, requests, 2);
+  assert.equal(client.advanceReconnect('127.0.0.1'), false, 'leave the authorised socket alone');
+
+  const closed = once(client, 'close');
+  wire.push(Buffer.from([0x88, 2, 0x03, 0xe8]));
+  await closed;
+  assert.equal(retries.pending, 1);
+  assert.equal(client.advanceReconnect('127.0.0.1'), true, 'a new outage may advance once after registration');
+  assert.equal(retries.pending, 0);
+  assert.equal(retries.cancelled, 2);
+  await finishRegistration(client, requests, 3);
+  assert.equal(requests.length, 4);
+});
+
+test('a hint leaves the in-flight port fallback intact and preserves port order on the next cycle', bounds, async t => {
+  const retries = holdReconnectTimers(t);
+  const requests = fixturePeer(t, ['withheld', 'withheld', 'withheld', 'upgraded']);
+  const { client } = createClient(t, { url: undefined, host: '127.0.0.1', reconnect: retries.reconnect });
+  await waitFor(() => requests[1], 'the alternate-port handshake');
+  assert.equal(client.advanceReconnect('127.0.0.1'), false);
+  assert.equal(requests.length, 2);
+  assert.equal(retries.pending, 0);
+
+  await waitFor(() => retries.pending === 1, 'retry after both ports time out');
+  assert.equal(client.advanceReconnect('127.0.0.1'), true);
+  assert.equal(retries.cancelled, 1);
+  await finishRegistration(client, requests, 3);
+  assert.deepEqual(requests.map(request => String(request.options.port)), ['3001', '3000', '3001', '3000']);
+});
+
+test('opening a socket with rejected registration does not re-arm rediscovery', bounds, async t => {
+  const retries = holdReconnectTimers(t);
+  const requests = fixturePeer(t, ['withheld', 'upgraded', 'upgraded']);
+  const { client, errors } = createClient(t, { reconnect: retries.reconnect });
+  await waitFor(() => retries.pending === 1, 'initial retry timer');
+  assert.equal(client.advanceReconnect('127.0.0.1'), true);
+
+  const { wire, request } = await registration(requests, 1);
+  sendEnvelope(wire, { id: request.id, type: 'error', error: '403 cancelled' });
+  await waitFor(() => errors.some(error => error.message === '403 cancelled'), 'registration failure');
+  const closed = once(client, 'close');
+  wire.push(Buffer.from([0x88, 2, 0x03, 0xe8]));
+  await closed;
+  assert.equal(retries.pending, 1);
+  assert.equal(client.advanceReconnect('127.0.0.1'), false);
+  assert.equal(requests.length, 2);
+  retries.fire();
+  await finishRegistration(client, requests, 2);
+});
+
+test('a retired adapter never resumes the cancelled retry', bounds, async t => {
+  const retries = holdReconnectTimers(t);
+  const requests = fixturePeer(t, ['withheld']);
+  const { client } = createClient(t, { reconnect: retries.reconnect });
+  await waitFor(() => retries.pending === 1, 'a scheduled retry before retirement');
+  await client.disconnect();
+  assert.equal(retries.pending, 0);
+  assert.equal(retries.cancelled, 1);
+  assert.equal(client.advanceReconnect('127.0.0.1'), false);
+  assert.equal(requests.length, 1);
+});
+
+test('rediscovery cannot advance a retry before a pairing key exists', bounds, async t => {
+  const retries = holdReconnectTimers(t);
+  const requests = fixturePeer(t, ['withheld']);
+  const { client } = createClient(t, { clientKey: null, reconnect: retries.reconnect });
+  await waitFor(() => retries.pending === 1, 'scheduled retry for an unpaired adapter');
+  assert.equal(client.advanceReconnect('127.0.0.1'), false);
+  assert.equal(retries.pending, 1);
+  assert.equal(retries.cancelled, 0);
+  assert.equal(requests.length, 1);
 });

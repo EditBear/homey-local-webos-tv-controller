@@ -4,18 +4,20 @@ const assert = require('node:assert/strict');
 const {EventEmitter} = require('node:events');
 const Module = require('node:module');
 const test = require('node:test');
-const {attempts} = require('./offline-barrier.cjs');
+const {attempts} = require(process.env.HOMEY_OFFLINE_BARRIER || './offline-barrier.cjs');
 const load = Module._load;
 Module._load = function (name, ...args) {
   if (name === 'homey') return {Device: class {}, Driver: class {}};
   return load.call(this, name, ...args);
 };
 
-const Device = require('../drivers/webos_plus/device');
-const Driver = require('../drivers/webos_plus/driver');
-const {SourceNameReport} = require('../drivers/webos_plus/webos/utils/source-name-report');
-const {endpoints} = require('../drivers/webos_plus/webos/utils/constants');
-const manifest = require('../app.json');
+const {resolve} = require('node:path');
+const packageDir = process.env.HOMEY_TEST_PACKAGE || resolve(__dirname, '..');
+const Device = require(resolve(packageDir, 'drivers/webos_plus/device'));
+const Driver = require(resolve(packageDir, 'drivers/webos_plus/driver'));
+const {SourceNameReport} = require(resolve(packageDir, 'drivers/webos_plus/webos/utils/source-name-report'));
+const {endpoints} = require(resolve(packageDir, 'drivers/webos_plus/webos/utils/constants'));
+const manifest = require(resolve(packageDir, 'app.json'));
 Module._load = load;
 
 const cardId = 'webos_request_current_source';
