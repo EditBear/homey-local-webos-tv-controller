@@ -63,7 +63,7 @@ async function setup(t, usePoll = false) {
 
 test('the device Flow carries the raw receipt time before the two-second ON debounce', async t => {
   const card = manifest.flow.triggers.find(entry => entry.id === cardId);
-  assert.deepEqual(card.args, [{name: 'webosDevice', type: 'device', filter: 'driver_id=webos_plus'}]);
+  assert.deepEqual(card.args, [{name: 'webosDevice', type: 'device', filter: 'driver_id=webos_plus|webos_plus_manual'}]);
   assert.deepEqual(card.tokens.map(({name, type}) => ({name, type})), [{name: 'confirmedAt', type: 'number'}]);
   const f = await setup(t);
   assert.deepEqual(f.writes, [{key: 'onoff', value: true, time: start}]);

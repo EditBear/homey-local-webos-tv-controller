@@ -90,7 +90,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -130,7 +130,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -172,7 +172,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -206,7 +206,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -220,7 +220,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -234,7 +234,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -276,7 +276,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -301,7 +301,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -343,7 +343,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -377,7 +377,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -484,7 +484,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ],
         "tokens": [
@@ -589,7 +589,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -609,7 +609,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -631,7 +631,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -645,7 +645,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -666,7 +666,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -687,7 +687,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -708,7 +708,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -730,7 +730,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       }
@@ -789,7 +789,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -820,7 +820,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -843,7 +843,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -930,7 +930,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -950,7 +950,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -972,7 +972,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -994,7 +994,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -1277,7 +1277,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -1299,7 +1299,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -1313,7 +1313,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -1327,7 +1327,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -1341,7 +1341,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -1360,7 +1360,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -1374,7 +1374,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       },
@@ -1388,7 +1388,7 @@
           {
             "name": "webosDevice",
             "type": "device",
-            "filter": "driver_id=webos_plus"
+            "filter": "driver_id=webos_plus|webos_plus_manual"
           }
         ]
       }
@@ -1398,8 +1398,8 @@
     {
       "id": "webos_plus",
       "name": {
-        "en": "Local webOS TV Controller",
-        "nl": "Lokale webOS-tv-controller"
+        "en": "webOS TV (Auto)",
+        "nl": "webOS-tv (Automatisch)"
       },
       "class": "tv",
       "discovery": "webos",
@@ -1511,6 +1511,32 @@
                 "nl": "Het IP adres van de TV"
               },
               "value": "0.0.0.0"
+            },
+            {
+              "id": "macAddress",
+              "type": "text",
+              "label": {
+                "en": "MAC address of the TV",
+                "nl": "MAC-adres van de TV"
+              },
+              "hint": {
+                "en": "Used for Wake-on-LAN (turning the TV on). Format: AA:BB:CC:DD:EE:FF.",
+                "nl": "Gebruikt voor Wake-on-LAN (de TV aanzetten). Formaat: AA:BB:CC:DD:EE:FF."
+              },
+              "value": ""
+            },
+            {
+              "id": "allowUnsignedPairing",
+              "type": "checkbox",
+              "label": {
+                "en": "Allow unsigned pairing",
+                "nl": "Niet-ondertekende koppeling toestaan"
+              },
+              "hint": {
+                "en": "Only for TVs that refuse the normal pairing (for example 'blacklisted certificate' on newer firmware). Homey then registers without LG's signature, which may give reduced permissions, and some features may stop working. Changing this reconnects to the TV.",
+                "nl": "Alleen voor tv's die de normale koppeling weigeren (bijvoorbeeld 'blacklisted certificate' bij nieuwere firmware). Homey registreert dan zonder LG-handtekening, wat beperktere rechten kan geven, waardoor sommige functies niet werken. Bij wijzigen wordt opnieuw verbonden met de tv."
+              },
+              "value": false
             }
           ]
         }
@@ -1545,6 +1571,195 @@
         "large": "/drivers/webos_plus/assets/images/large.png",
         "small": "/drivers/webos_plus/assets/images/small.png",
         "xlarge": "/drivers/webos_plus/assets/images/xlarge.png"
+      },
+      "platforms": [
+        "local"
+      ],
+      "connectivity": [
+        "lan"
+      ]
+    },
+    {
+      "id": "webos_plus_manual",
+      "name": {
+        "en": "webOS TV (Manual via IP)",
+        "nl": "webOS-tv (Handmatig via IP)"
+      },
+      "class": "tv",
+      "pair": [
+        {
+          "id": "manual_ip",
+          "navigation": {
+            "next": "list_devices"
+          }
+        },
+        {
+          "id": "list_devices",
+          "template": "list_devices",
+          "navigation": {
+            "next": "add_my_devices"
+          }
+        },
+        {
+          "id": "add_my_devices",
+          "template": "add_devices"
+        }
+      ],
+      "settings": [
+        {
+          "type": "group",
+          "label": {
+            "en": "Advanced settings",
+            "nl": "Geavanceerde instellingen"
+          },
+          "children": [
+            {
+              "id": "powerStateTimeout",
+              "type": "number",
+              "label": {
+                "en": "Timeout power listener",
+                "nl": "Timeout power listener"
+              },
+              "hint": {
+                "en": "The timeout is used to test whether or not the tv is turned off via a websocket listener. Only change this value if you know what you are doing or are experiencing issues when you turn off the tv with the remote but it not being registered in the app. Increase the value to give the app more time before checking (increasing reliability). Decrease the value if you think the you can get away with less time between checks, however it might become unreliable if you make it too fast.",
+                "nl": "De timeout wordt gebruikt om te controleren of de tv uit gaat via een websocket listener. Verander dit alleen als je weet wat je doet of als je problemen ervaart wanneer je de tv uitzet met de afstandsbediening maar dit niet geregistreerd wordt in de app. Verhoog de waarde om de app meer tijd te geven tussen de controle (verhoogt betrouwbaarheid). Verlaag de waarde als je denkt dat het net wat sneller kan, echter kan het onbetrouwbaar worden als je het te kort maakt."
+              },
+              "value": 2000,
+              "min": 0,
+              "max": 60000,
+              "units": {
+                "en": "miliseconds",
+                "nl": "miliseconden"
+              }
+            },
+            {
+              "id": "usePoll",
+              "type": "checkbox",
+              "label": {
+                "en": "Use polling instead of power listener",
+                "nl": "Gebruik polling i.p.v. power check"
+              },
+              "hint": {
+                "en": "When enabling this, the power listener is disabled and a polling mechanism is used to determine if your tv is on or off. The power listener does not work for all LG tv's, so polling might work better in some case.",
+                "nl": "Wanneer dit aangezet wordt, wordt er geen gebruik gemaakt van de power listener maar wordt er gepolled om te kijken of de tv aan of uit is. De power listener werkt niet bij alle LG tv's, dus pollen werkt misschien beter in sommige gevallen."
+              },
+              "value": false
+            },
+            {
+              "id": "pollInterval",
+              "type": "number",
+              "label": {
+                "en": "Poll interval",
+                "nl": "Poll interval"
+              },
+              "hint": {
+                "en": "Interval used between latest on/off check for polling. Only change this is you are experiencing issues when turning your tv on/off with the remote. Higher number increases reliability, lower decreases.",
+                "nl": "De interval geeft de tijd aan tussen aan/uit checks voor pollen. Wijzig dit alleen als je problemen ervaart wanneer je de tv aan/uit doet met de afstandsbediening. Een hogere interval is betrouwbaarder, een lage interval maakt het minder betrouwbaar."
+              },
+              "value": 10,
+              "min": 5,
+              "max": 3600,
+              "units": {
+                "en": "seconds",
+                "nl": "seconden"
+              }
+            },
+            {
+              "id": "pollTimeout",
+              "type": "number",
+              "label": {
+                "en": "Poll timeout",
+                "nl": "Poll timeout"
+              },
+              "hint": {
+                "en": "After how many seconds give up on on/off check via polling and assume tv is turned off. Keep it lower than the poll interval.",
+                "nl": "Na hoeveel seconden de aan/uit check via polling moet opgeven worden en aannemen dat de tv uit is. Hou het onder de poll interval."
+              },
+              "value": 8,
+              "min": 0,
+              "max": 3600,
+              "units": {
+                "en": "seconds",
+                "nl": "seconden"
+              }
+            },
+            {
+              "id": "manualIpAddress",
+              "type": "checkbox",
+              "label": {
+                "en": "Set the IP address manual",
+                "nl": "Zet het IP adres handmatig"
+              },
+              "value": true
+            },
+            {
+              "id": "ipAddress",
+              "type": "text",
+              "label": {
+                "en": "The IP address of the TV",
+                "nl": "Het IP adres van de TV"
+              },
+              "value": "0.0.0.0"
+            },
+            {
+              "id": "macAddress",
+              "type": "text",
+              "label": {
+                "en": "MAC address of the TV",
+                "nl": "MAC-adres van de TV"
+              },
+              "hint": {
+                "en": "Used for Wake-on-LAN (turning the TV on). Format: AA:BB:CC:DD:EE:FF.",
+                "nl": "Gebruikt voor Wake-on-LAN (de TV aanzetten). Formaat: AA:BB:CC:DD:EE:FF."
+              },
+              "value": ""
+            },
+            {
+              "id": "allowUnsignedPairing",
+              "type": "checkbox",
+              "label": {
+                "en": "Allow unsigned pairing",
+                "nl": "Niet-ondertekende koppeling toestaan"
+              },
+              "hint": {
+                "en": "Only for TVs that refuse the normal pairing (for example 'blacklisted certificate' on newer firmware). Homey then registers without LG's signature, which may give reduced permissions, and some features may stop working. Changing this reconnects to the TV.",
+                "nl": "Alleen voor tv's die de normale koppeling weigeren (bijvoorbeeld 'blacklisted certificate' bij nieuwere firmware). Homey registreert dan zonder LG-handtekening, wat beperktere rechten kan geven, waardoor sommige functies niet werken. Bij wijzigen wordt opnieuw verbonden met de tv."
+              },
+              "value": true
+            }
+          ]
+        }
+      ],
+      "capabilities": [
+        "onoff",
+        "volume_set",
+        "channel_up",
+        "volume_up",
+        "channel_down",
+        "volume_down",
+        "volume_mute"
+      ],
+      "capabilitiesOptions": {
+        "speaker_artist": {
+          "title": {
+            "en": "App or input",
+            "nl": "App of ingang"
+          }
+        },
+        "speaker_track": {
+          "title": {
+            "en": "Channel",
+            "nl": "Zender"
+          }
+        },
+        "onoff": {
+          "uiQuickAction": true
+        }
+      },
+      "images": {
+        "large": "/drivers/webos_plus_manual/assets/images/large.png",
+        "small": "/drivers/webos_plus_manual/assets/images/small.png",
+        "xlarge": "/drivers/webos_plus_manual/assets/images/xlarge.png"
       },
       "platforms": [
         "local"
