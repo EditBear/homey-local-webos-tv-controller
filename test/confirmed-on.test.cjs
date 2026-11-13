@@ -39,6 +39,7 @@ async function setup(t, usePoll = false) {
   device.getSettings = () => settings;
   device.setCapabilityValue = async (key, value) => writes.push({key, value, time: Date.now()});
   for (const name of ['volumeListener', 'channelListener', 'appListener', 'soundOutputListener', 'poll']) device[name] = () => {};
+  device.refreshInputSelect = () => Promise.resolve();
   client.subscribe = (uri, callback) => {
     assert.equal(uri, endpoints.powerState);
     subscriptions.push(callback);
