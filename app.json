@@ -1520,8 +1520,8 @@
                 "nl": "MAC-adres van de TV"
               },
               "hint": {
-                "en": "Used for Wake-on-LAN (turning the TV on). Format: AA:BB:CC:DD:EE:FF.",
-                "nl": "Gebruikt voor Wake-on-LAN (de TV aanzetten). Formaat: AA:BB:CC:DD:EE:FF."
+                "en": "Used for Wake-on-LAN (turning the TV on). Format: AA:BB:CC:DD:EE:FF. Changing it makes the TV ask for authorisation again.",
+                "nl": "Gebruikt voor Wake-on-LAN (de TV aanzetten). Formaat: AA:BB:CC:DD:EE:FF. Na wijzigen vraagt de TV opnieuw om autorisatie."
               },
               "value": ""
             },
@@ -1542,12 +1542,12 @@
               "id": "resetPairing",
               "type": "checkbox",
               "label": {
-                "en": "Pair with the TV again",
-                "nl": "Opnieuw koppelen met de tv"
+                "en": "Re-pair with the TV",
+                "nl": "Opnieuw koppelen met de TV"
               },
               "hint": {
-                "en": "Tick and save to remove the stored pairing key and reconnect. The TV then asks for authorisation again. The box unticks itself. Changing the MAC address does the same.",
-                "nl": "Vink aan en sla op om de opgeslagen koppelsleutel te verwijderen en opnieuw te verbinden. De tv vraagt dan opnieuw om autorisatie. Het vakje wordt vanzelf weer uitgevinkt. Het wijzigen van het MAC-adres doet hetzelfde."
+                "en": "Tick this and save to delete the stored pairing key and reconnect. The TV will then ask for authorisation again. The box unticks itself afterwards.",
+                "nl": "Vink dit aan en sla op om de opgeslagen koppelsleutel te verwijderen en opnieuw te verbinden. De TV vraagt dan opnieuw om autorisatie. Het vinkje verdwijnt daarna vanzelf."
               },
               "value": false
             }
@@ -1722,8 +1722,8 @@
                 "nl": "MAC-adres van de TV"
               },
               "hint": {
-                "en": "Used for Wake-on-LAN (turning the TV on). Format: AA:BB:CC:DD:EE:FF.",
-                "nl": "Gebruikt voor Wake-on-LAN (de TV aanzetten). Formaat: AA:BB:CC:DD:EE:FF."
+                "en": "Used for Wake-on-LAN (turning the TV on). Format: AA:BB:CC:DD:EE:FF. Changing it makes the TV ask for authorisation again.",
+                "nl": "Gebruikt voor Wake-on-LAN (de TV aanzetten). Formaat: AA:BB:CC:DD:EE:FF. Na wijzigen vraagt de TV opnieuw om autorisatie."
               },
               "value": ""
             },
@@ -1744,12 +1744,12 @@
               "id": "resetPairing",
               "type": "checkbox",
               "label": {
-                "en": "Pair with the TV again",
-                "nl": "Opnieuw koppelen met de tv"
+                "en": "Re-pair with the TV",
+                "nl": "Opnieuw koppelen met de TV"
               },
               "hint": {
-                "en": "Tick and save to remove the stored pairing key and reconnect. The TV then asks for authorisation again. The box unticks itself. Changing the MAC address does the same.",
-                "nl": "Vink aan en sla op om de opgeslagen koppelsleutel te verwijderen en opnieuw te verbinden. De tv vraagt dan opnieuw om autorisatie. Het vakje wordt vanzelf weer uitgevinkt. Het wijzigen van het MAC-adres doet hetzelfde."
+                "en": "Tick this and save to delete the stored pairing key and reconnect. The TV will then ask for authorisation again. The box unticks itself afterwards.",
+                "nl": "Vink dit aan en sla op om de opgeslagen koppelsleutel te verwijderen en opnieuw te verbinden. De TV vraagt dan opnieuw om autorisatie. Het vinkje verdwijnt daarna vanzelf."
               },
               "value": false
             }
