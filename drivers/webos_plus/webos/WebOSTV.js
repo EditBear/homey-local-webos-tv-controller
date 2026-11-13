@@ -38,6 +38,15 @@ class WebOSTV extends Homey.Device {
   }
 
   /**
+   * Forget the stored pairing key, so the next connection registers again and
+   * the TV asks for authorisation.
+   */
+  async _forgetPairingKey() {
+    this.log('_forgetPairingKey: Removing the stored pairing key')
+    await this.unsetStoreValue(CLIENT_KEY_STORE_KEY)
+  }
+
+  /**
    * Connect to the LG WebOS TV
    */
   _connect() {

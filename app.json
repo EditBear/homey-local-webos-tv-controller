@@ -1537,6 +1537,19 @@
                 "nl": "Alleen voor tv's die de normale koppeling weigeren (bijvoorbeeld 'blacklisted certificate' bij nieuwere firmware). Homey registreert dan zonder LG-handtekening, wat beperktere rechten kan geven, waardoor sommige functies niet werken. Bij wijzigen wordt opnieuw verbonden met de tv."
               },
               "value": false
+            },
+            {
+              "id": "resetPairing",
+              "type": "checkbox",
+              "label": {
+                "en": "Pair with the TV again",
+                "nl": "Opnieuw koppelen met de tv"
+              },
+              "hint": {
+                "en": "Tick and save to remove the stored pairing key and reconnect. The TV then asks for authorisation again. The box unticks itself. Changing the MAC address does the same.",
+                "nl": "Vink aan en sla op om de opgeslagen koppelsleutel te verwijderen en opnieuw te verbinden. De tv vraagt dan opnieuw om autorisatie. Het vakje wordt vanzelf weer uitgevinkt. Het wijzigen van het MAC-adres doet hetzelfde."
+              },
+              "value": false
             }
           ]
         }
@@ -1726,6 +1739,19 @@
                 "nl": "Alleen voor tv's die de normale koppeling weigeren (bijvoorbeeld 'blacklisted certificate' bij nieuwere firmware). Homey registreert dan zonder LG-handtekening, wat beperktere rechten kan geven, waardoor sommige functies niet werken. Bij wijzigen wordt opnieuw verbonden met de tv."
               },
               "value": true
+            },
+            {
+              "id": "resetPairing",
+              "type": "checkbox",
+              "label": {
+                "en": "Pair with the TV again",
+                "nl": "Opnieuw koppelen met de tv"
+              },
+              "hint": {
+                "en": "Tick and save to remove the stored pairing key and reconnect. The TV then asks for authorisation again. The box unticks itself. Changing the MAC address does the same.",
+                "nl": "Vink aan en sla op om de opgeslagen koppelsleutel te verwijderen en opnieuw te verbinden. De tv vraagt dan opnieuw om autorisatie. Het vakje wordt vanzelf weer uitgevinkt. Het wijzigen van het MAC-adres doet hetzelfde."
+              },
+              "value": false
             }
           ]
         }
