@@ -10,6 +10,13 @@
     "name": "TV name",
     "mac": "MAC address",
     "ip": "IP address",
-    "add": "Add"
+    "add": "Add",
+    "manual": {
+      "title": "Add TV by IP address",
+      "ip": "IP address of the TV",
+      "ipHint": "Use \"webOS TV (Auto)\" to search the network automatically instead.",
+      "mac": "MAC address of the TV (optional)",
+      "macHint": "Only needed to switch the TV on with Wake-on-LAN. Homey cannot look it up across VLANs."
+    }
   }
 }

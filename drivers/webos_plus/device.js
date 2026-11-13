@@ -25,6 +25,7 @@ const {toLgVolume, fromLgVolume} = require('./webos/utils/numeric-volume');
 const {SourceNameReport, SOURCE_NAME_CAPABILITY} = require('./webos/utils/source-name-report');
 const {ChannelReport, CHANNEL_CAPABILITY} = require('./webos/utils/channel-report');
 const net = require('net');
+const {normalizeMacAddress, isUsableIpv4} = require('./webos/utils/manual-setup');
 const https = require('https');
 
 const unsecureHttpsAgent = new https.Agent({
@@ -255,7 +256,52 @@ class WebosPlusDevice extends WebOSTV {
   }
 
   onSettings({oldSettings, newSettings, changedKeys}) {
-    if (oldSettings.usePoll !== newSettings.usePoll){
+    if (changedKeys.includes('macAddress') && newSettings.macAddress) {
+      const macAddress = normalizeMacAddress(newSettings.macAddress);
+      if (macAddress === null) {
+        return Promise.reject(new Error('The MAC address should look like AA:BB:CC:DD:EE:FF.'));
+      }
+      if (macAddress !== newSettings.macAddress) {
+        this.homey.setTimeout(() => {
+          this.setSettings({macAddress}).catch(this.error);
+        }, 500);
+      }
+    }
+    if (changedKeys.includes('ipAddress') && !isUsableIpv4(String(newSettings.ipAddress || '').trim())) {
+      return Promise.reject(new Error('Please enter a valid IPv4 address.'));
+    }
+
+    // A new MAC address or the Re-pair checkbox makes the TV ask for authorisation again.
+    const forgetKey = newSettings.resetPairing === true
+      || (changedKeys.includes('macAddress') && newSettings.macAddress
+        && normalizeMacAddress(oldSettings.macAddress) !== normalizeMacAddress(newSettings.macAddress));
+
+    if (forgetKey || changedKeys.includes('ipAddress') || changedKeys.includes('allowUnsignedPairing')) {
+      // New values are only stored after this method resolves.
+      this.homey.setTimeout(async () => {
+        if (this._channelStopped) return;
+        this.log(`onSettings: connection setting changed, reconnecting${forgetKey ? ' and pairing again' : ''}`);
+        try {
+          this.lgtv?.disconnect();
+        } catch (error) {
+          this.error(error);
+        }
+        if (forgetKey) {
+          try {
+            await this._forgetPairingKey();
+          } catch (error) {
+            this.error('onSettings: could not remove the pairing key', error);
+          }
+        }
+        if (newSettings.resetPairing === true) {
+          await this.setSettings({resetPairing: false}).catch(this.error);
+        }
+        if (this._channelStopped) return;
+        this.construct();
+        this._connect();
+        this.initDevice();
+      }, 500);
+    } else if (oldSettings.usePoll !== newSettings.usePoll){
       this.lgtv.disconnect();
       this.construct();
       this._connect();

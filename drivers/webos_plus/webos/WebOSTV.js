@@ -38,6 +38,15 @@ class WebOSTV extends Homey.Device {
   }
 
   /**
+   * Forget the stored pairing key, so the next connection registers again and
+   * the TV asks for authorisation.
+   */
+  async _forgetPairingKey() {
+    this.log('_forgetPairingKey: Removing the stored pairing key')
+    await this.unsetStoreValue(CLIENT_KEY_STORE_KEY)
+  }
+
+  /**
    * Connect to the LG WebOS TV
    */
   _connect() {
@@ -66,6 +75,7 @@ class WebOSTV extends Homey.Device {
       host: this.getSettings().ipAddress,
       clientKey,
       saveKey,
+      allowUnsignedPairing: this.getSettings().allowUnsignedPairing === true,
     })
     this.lgtv = client
 
@@ -369,6 +379,9 @@ class WebOSTV extends Homey.Device {
    */
   _turnOn() {
     const {macAddress} = this.getSettings()
+    if (!macAddress) {
+      return Promise.reject(new Error('No MAC address is set for this TV, so Wake-on-LAN is not possible. Add it in the device settings.'))
+    }
     this.log(`_turnOn: Send request to turn on (WoL) with mac address ${ macAddress }`)
     return new Promise((resolve, reject) => {
       wol.wake(macAddress, (error) => {
