@@ -1522,7 +1522,8 @@
         "volume_up",
         "channel_down",
         "volume_down",
-        "volume_mute"
+        "volume_mute",
+        "webos_input"
       ],
       "capabilitiesOptions": {
         "speaker_artist": {
@@ -1568,6 +1569,24 @@
       "getable": true,
       "setable": false,
       "uiComponent": "sensor"
+    },
+    "webos_input": {
+      "type": "enum",
+      "title": {
+        "en": "Input",
+        "nl": "Ingang"
+      },
+      "uiComponent": "picker",
+      "getable": true,
+      "setable": true,
+      "values": [
+        {
+          "id": "none",
+          "title": {
+            "en": "-"
+          }
+        }
+      ]
     }
   }
 }
