@@ -25,6 +25,7 @@ const {toLgVolume, fromLgVolume} = require('./webos/utils/numeric-volume');
 const {SourceNameReport, SOURCE_NAME_CAPABILITY} = require('./webos/utils/source-name-report');
 const {ChannelReport, CHANNEL_CAPABILITY} = require('./webos/utils/channel-report');
 const net = require('net');
+const {planVolumeSteps, MAX_STEPS} = require('./webos/utils/volume-steps');
 const https = require('https');
 
 const unsecureHttpsAgent = new https.Agent({
@@ -739,9 +740,48 @@ class WebosPlusDevice extends WebOSTV {
     this.log(`volumeSet: Called`, value);
     const lgVolume = toLgVolume(value);
     this.log(`volumeSet: Try to set LG volume to ${lgVolume}`);
+
+    const soundOutput = this.getStoreValue(store.currentSoundOutput);
+    const currentLg = Math.round(Number(this.getCapabilityValue(capabilities.volumeSet)) * 100);
+    const plan = planVolumeSteps(soundOutput, currentLg, lgVolume);
+    if (plan) {
+      this.log(`volumeSet: Sound output is '${soundOutput}', stepping ${plan.direction} ${plan.count} time(s)`);
+      await this._volumeStepTo(currentLg, lgVolume);
+      return;
+    }
+
     // An acknowledgement is not a measured level, especially with external audio.
     // Let command failures reach Homey; volumeListener publishes actual reports.
     await this._volumeSet(lgVolume);
+  }
+
+  /**
+   * Step the volume with up/down presses. A newer slider value changes the
+   * target of a run that is already stepping instead of starting a second one.
+   */
+  async _volumeStepTo(start, target) {
+    this._volumeStepTarget = target;
+    if (this._volumeStepping) return;
+    this._volumeStepping = true;
+    try {
+      let position = start;
+      let steps = 0;
+      while (!this._channelStopped && steps < MAX_STEPS) {
+        const next = planVolumeSteps('external', position, this._volumeStepTarget);
+        if (!next || next.count === 0) break;
+        if (next.direction === 'up') {
+          await this._volumeUp();
+          position += 1;
+        } else {
+          await this._volumeDown();
+          position -= 1;
+        }
+        steps += 1;
+        await new Promise(resolve => this.homey.setTimeout(resolve, 80));
+      }
+    } finally {
+      this._volumeStepping = false;
+    }
   }
 
   /**
