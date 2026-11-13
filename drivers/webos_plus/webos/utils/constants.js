@@ -102,6 +102,7 @@ const capabilities = {
   speakerPlaying: 'speaker_playing',
   speakerNext: 'speaker_next',
   speakerPrev: 'speaker_prev',
+  inputSelect: 'webos_input',
 }
 
 const store = {
