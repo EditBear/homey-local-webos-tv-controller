@@ -372,6 +372,21 @@ test('the exact blacklist response does not send an unsigned register frame', bo
   assert.equal(connected, false);
 });
 
+test('with allowUnsignedPairing the blacklist response is followed by an unsigned register frame', bounds, async t => {
+  const requests = fixturePeer(t, ['upgraded']);
+  const { client, errors } = createClient(t, { clientKey: null, allowUnsignedPairing: true });
+  const { wire, request } = await registration(requests);
+  assert.ok(request.payload.manifest.signed);
+  sendEnvelope(wire, { id: request.id, type: 'error', error: '403 Pairing rejected: blacklisted certificate detected' });
+  const unsigned = await waitFor(
+    () => clientMessages(wire).filter(frame => frame.type === 'register')[1], 'unsigned register frame');
+  assert.equal(unsigned.payload.manifest.signed, undefined);
+  const saved = once(client, 'connect');
+  sendEnvelope(wire, { id: unsigned.id, type: 'registered', payload: { 'client-key': 'fixture-unsigned-key' } });
+  await saved;
+  assert.deepEqual(errors, []);
+});
+
 test('concurrent playback replies keep the matching original LG envelope and settle once', bounds, async t => {
   const requests = fixturePeer(t, ['upgraded']);
   const { client, errors } = createClient(t);

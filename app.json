@@ -1398,8 +1398,8 @@
     {
       "id": "webos_plus",
       "name": {
-        "en": "Local webOS TV Controller",
-        "nl": "Lokale webOS-tv-controller"
+        "en": "webOS TV (Auto)",
+        "nl": "webOS-tv (Automatisch)"
       },
       "class": "tv",
       "discovery": "webos",
@@ -1524,6 +1524,19 @@
                 "nl": "Gebruikt voor Wake-on-LAN (de TV aanzetten). Formaat: AA:BB:CC:DD:EE:FF."
               },
               "value": ""
+            },
+            {
+              "id": "allowUnsignedPairing",
+              "type": "checkbox",
+              "label": {
+                "en": "Allow unsigned pairing",
+                "nl": "Niet-ondertekende koppeling toestaan"
+              },
+              "hint": {
+                "en": "Only for TVs that refuse the normal pairing (for example 'blacklisted certificate' on newer firmware). Homey then registers without LG's signature, which may give reduced permissions, and some features may stop working. Changing this reconnects to the TV.",
+                "nl": "Alleen voor tv's die de normale koppeling weigeren (bijvoorbeeld 'blacklisted certificate' bij nieuwere firmware). Homey registreert dan zonder LG-handtekening, wat beperktere rechten kan geven, waardoor sommige functies niet werken. Bij wijzigen wordt opnieuw verbonden met de tv."
+              },
+              "value": false
             }
           ]
         }
@@ -1569,8 +1582,8 @@
     {
       "id": "webos_plus_manual",
       "name": {
-        "en": "Local webOS TV Controller (manual IP)",
-        "nl": "Lokale webOS-tv-controller (handmatig IP)"
+        "en": "webOS TV (Manual via IP)",
+        "nl": "webOS-tv (Handmatig via IP)"
       },
       "class": "tv",
       "pair": [
@@ -1700,6 +1713,19 @@
                 "nl": "Gebruikt voor Wake-on-LAN (de TV aanzetten). Formaat: AA:BB:CC:DD:EE:FF."
               },
               "value": ""
+            },
+            {
+              "id": "allowUnsignedPairing",
+              "type": "checkbox",
+              "label": {
+                "en": "Allow unsigned pairing",
+                "nl": "Niet-ondertekende koppeling toestaan"
+              },
+              "hint": {
+                "en": "Only for TVs that refuse the normal pairing (for example 'blacklisted certificate' on newer firmware). Homey then registers without LG's signature, which may give reduced permissions, and some features may stop working. Changing this reconnects to the TV.",
+                "nl": "Alleen voor tv's die de normale koppeling weigeren (bijvoorbeeld 'blacklisted certificate' bij nieuwere firmware). Homey registreert dan zonder LG-handtekening, wat beperktere rechten kan geven, waardoor sommige functies niet werken. Bij wijzigen wordt opnieuw verbonden met de tv."
+              },
+              "value": true
             }
           ]
         }

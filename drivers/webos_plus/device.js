@@ -271,11 +271,11 @@ class WebosPlusDevice extends WebOSTV {
       return Promise.reject(new Error('Please enter a valid IPv4 address.'));
     }
 
-    if (changedKeys.includes('ipAddress')) {
+    if (changedKeys.includes('ipAddress') || changedKeys.includes('allowUnsignedPairing')) {
       // New values are only stored after this method resolves.
       this.homey.setTimeout(() => {
         if (this._channelStopped) return;
-        this.log('onSettings: IP address changed, reconnecting');
+        this.log('onSettings: connection setting changed, reconnecting');
         try {
           this.lgtv?.disconnect();
         } catch (error) {

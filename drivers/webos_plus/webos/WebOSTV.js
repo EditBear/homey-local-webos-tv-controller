@@ -66,6 +66,7 @@ class WebOSTV extends Homey.Device {
       host: this.getSettings().ipAddress,
       clientKey,
       saveKey,
+      allowUnsignedPairing: this.getSettings().allowUnsignedPairing === true,
     })
     this.lgtv = client
 
