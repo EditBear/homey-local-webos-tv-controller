@@ -19,10 +19,12 @@
 'use strict';
 
 const {isDeepStrictEqual} = require('node:util');
+const {setTimeout: wait} = require('node:timers/promises');
 const fetch = require('node-fetch');
 const WebOSTV = require('./webos/WebOSTV');
-const {capabilities, store} = require('./webos/utils/constants');
+const {capabilities, endpoints, store} = require('./webos/utils/constants');
 const {toLgVolume, fromLgVolume} = require('./webos/utils/numeric-volume');
+const {ARC_OUTPUT, MAX_STEPS, STEP_DELAY_MS, readArcVolume} = require('./webos/utils/volume-steps');
 const {SourceNameReport, SOURCE_NAME_CAPABILITY} = require('./webos/utils/source-name-report');
 const {ChannelReport, CHANNEL_CAPABILITY} = require('./webos/utils/channel-report');
 const net = require('net');
@@ -638,7 +640,11 @@ class WebosPlusDevice extends WebOSTV {
    */
   soundOutputListener() {
     this.log(`soundOutputListener: Called`);
+    const client = this.lgtv;
     this._soundOutputListener((newSoundOutput) => {
+      if (this._arcVolumeRun?.client === client && newSoundOutput !== ARC_OUTPUT) {
+        this._arcVolumeRun.cancelled = true;
+      }
       if (!this.checkOnOff(newSoundOutput)) {
         return;
       }
@@ -836,10 +842,84 @@ class WebosPlusDevice extends WebOSTV {
   async volumeSet(value) {
     this.log(`volumeSet: Called`, value);
     const lgVolume = toLgVolume(value);
+    if (this._arcVolumeRun) {
+      this.assertArcVolumeRun(this._arcVolumeRun);
+      this._arcVolumeRun.target = lgVolume;
+      return this._arcVolumeRun.done;
+    }
+    if (this.arcVolumeEnabled()) {
+      const run = {client: this.lgtv, target: lgVolume, cancelled: false};
+      this.assertArcVolumeRun(run);
+      this._arcVolumeRun = run;
+      run.done = this.stepArcVolume(run);
+      return run.done;
+    }
+
     this.log(`volumeSet: Try to set LG volume to ${lgVolume}`);
     // An acknowledgement is not a measured level, especially with external audio.
     // Let command failures reach Homey; volumeListener publishes actual reports.
     await this._volumeSet(lgVolume);
+  }
+
+  arcVolumeEnabled() {
+    return this.getSettings().stepExternalArcVolume === true &&
+      this.getStoreValue(store.currentSoundOutput) === ARC_OUTPUT;
+  }
+
+  assertArcVolumeRun(run) {
+    if (run.cancelled || !run.client || this.lgtv !== run.client || this._channelStopped ||
+        !this.arcVolumeEnabled() || this.getCapabilityValue(capabilities.onOff) !== true) {
+      throw new Error('HDMI ARC volume change interrupted');
+    }
+  }
+
+  async readCurrentArcVolume(run) {
+    this.assertArcVolumeRun(run);
+    const reply = await new Promise((resolve, reject) => {
+      run.client.request(endpoints.volume.get, (error, result) => {
+        if (error) reject(error);
+        else resolve(result);
+      });
+    });
+    this.assertArcVolumeRun(run);
+    const volume = readArcVolume(reply);
+    if (volume === null) {
+      throw new Error('HDMI ARC volume unavailable. Use the sound system controls.');
+    }
+    return volume;
+  }
+
+  async stepArcVolume(run) {
+    const deadline = performance.now() + MAX_STEPS * STEP_DELAY_MS;
+    const cancel = () => { run.cancelled = true; };
+    try {
+      run.client.once('close', cancel);
+      let current = await this.readCurrentArcVolume(run);
+      for (let steps = 0; current !== run.target; steps += 1) {
+        this.assertArcVolumeRun(run);
+        if (steps >= MAX_STEPS || performance.now() >= deadline) {
+          throw new Error('HDMI ARC volume change reached its step limit');
+        }
+        const requested = run.target;
+        const direction = Math.sign(requested - current);
+        if (direction > 0) await this._volumeUp();
+        else await this._volumeDown();
+        this.assertArcVolumeRun(run);
+        await wait(STEP_DELAY_MS);
+        const next = await this.readCurrentArcVolume(run);
+        if (next === run.target) return;
+        if ((next - current) * direction <= 0) {
+          throw new Error('HDMI ARC volume did not change as requested');
+        }
+        if (run.target === requested && (requested - next) * direction < 0) {
+          throw new Error('HDMI ARC volume moved past the requested level');
+        }
+        current = next;
+      }
+    } finally {
+      run.client.removeListener('close', cancel);
+      this._arcVolumeRun = null;
+    }
   }
 
   /**
@@ -849,6 +929,7 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<void>}
    */
   async volumeMute(value) {
+    if (this._arcVolumeRun) this._arcVolumeRun.cancelled = true;
     this.log(`volumeMute: Called`, value);
     this.log(`volumeMute: Try to set mute to ${value}`);
     const response = await this._volumeMute(value);
@@ -864,6 +945,7 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<void>}
    */
   async volumeUp() {
+    if (this._arcVolumeRun) this._arcVolumeRun.cancelled = true;
     this.log(`volumeUp: Called`);
     // The step size/result depends on the audio output; wait for its numeric report.
     await this._volumeUp();
@@ -874,6 +956,7 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<void>}
    */
   async volumeDown() {
+    if (this._arcVolumeRun) this._arcVolumeRun.cancelled = true;
     this.log(`volumeDown: Called`);
     await this._volumeDown();
   }

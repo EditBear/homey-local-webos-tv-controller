@@ -1495,6 +1495,19 @@
               }
             },
             {
+              "id": "stepExternalArcVolume",
+              "type": "checkbox",
+              "label": {
+                "en": "Step HDMI ARC volume",
+                "nl": "HDMI ARC-volume in stappen"
+              },
+              "hint": {
+                "en": "Enable only if the TV reports the volume of your HDMI ARC sound system. Use the Sonos app or Sonos device in Homey to set Sonos volume.",
+                "nl": "Schakel dit alleen in als de tv het volume van je HDMI ARC-geluidssysteem rapporteert. Gebruik de Sonos-app of het Sonos-apparaat in Homey om het Sonos-volume in te stellen."
+              },
+              "value": false
+            },
+            {
               "id": "manualIpAddress",
               "type": "checkbox",
               "label": {
