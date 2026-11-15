@@ -19,6 +19,7 @@
 const Homey = require('homey')
 const {endpoints} = require('./utils/constants')
 const {readLgVolume} = require('./utils/numeric-volume')
+const {normalizeMacAddress} = require('./utils/manual-setup')
 const wol = require('node-wol')
 const Jimp = require('jimp-compact')
 
@@ -38,6 +39,17 @@ class WebOSTV extends Homey.Device {
   }
 
   /**
+   * Forget the stored pairing key, so the next connection registers again and
+   * the TV asks for authorisation.
+   */
+  async _forgetPairingKey() {
+    // A retiring connection may already have handed a key write to Homey.
+    await this._pairingKeyWrite?.catch(() => {})
+    this.log('_forgetPairingKey: Removing the stored pairing key')
+    await this.unsetStoreValue(CLIENT_KEY_STORE_KEY)
+  }
+
+  /**
    * Connect to the LG WebOS TV
    */
   _connect() {
@@ -53,19 +65,20 @@ class WebOSTV extends Homey.Device {
     let client
     const saveKey = (key, callback) => {
       client.clientKey = key
-
-      Promise.resolve()
-        .then(() => this.setStoreValue(CLIENT_KEY_STORE_KEY, key))
-        .then(
-          () => callback(null),
-          error => callback(error),
-        )
+      const previous = this._pairingKeyWrite?.catch(() => {})
+      const write = Promise.resolve(previous).then(() => {
+        if (this.lgtv !== client) throw new Error('TV connection changed before saving its pairing key')
+        return this.setStoreValue(CLIENT_KEY_STORE_KEY, key)
+      })
+      this._pairingKeyWrite = write
+      write.then(() => callback(null), error => callback(error))
     }
 
     client = require('../lgtv2/lgtv2')({
       host: this.getSettings().ipAddress,
       clientKey,
       saveKey,
+      allowUnsignedPairing: this.getSettings().allowUnsignedPairing === true,
     })
     this.lgtv = client
 
@@ -368,7 +381,10 @@ class WebOSTV extends Homey.Device {
    * Turn tv on
    */
   _turnOn() {
-    const {macAddress} = this.getSettings()
+    const macAddress = normalizeMacAddress(this.getSettings().macAddress)
+    if (!macAddress) {
+      return Promise.reject(new Error('No MAC address is set for this TV, so Wake-on-LAN is not possible. Add it in the device settings.'))
+    }
     this.log(`_turnOn: Send request to turn on (WoL) with mac address ${ macAddress }`)
     return new Promise((resolve, reject) => {
       wol.wake(macAddress, (error) => {

@@ -76,14 +76,20 @@ module.exports = function createLGTV(options) {
     set: key => { upstream.clientKey = key; },
   });
 
-  // Preserve the approved signed permissions. Upstream's internal unsigned
-  // fallback would otherwise widen this private test to unaccepted webOS 26 pairing.
+  // Preserve the signed manifest. Allow a single unsigned attempt only after
+  // this TV rejects signed registration and its owner has opted in.
   const send = upstream.send.bind(upstream);
   let rejectedRegistration;
   upstream.send = (type, uri, payload, callback) => {
     if (type !== 'register') return send(type, uri, payload, callback);
     if (!payload?.manifest?.signed) {
-      callback(rejectedRegistration || new Error('LG refused signed registration'));
+      const rejection = rejectedRegistration;
+      rejectedRegistration = undefined;
+      if (options.allowUnsignedPairing === true &&
+          /403.*blacklisted certificate detected/i.test(rejection?.message || '')) {
+        return send(type, uri, payload, callback);
+      }
+      callback(rejection || new Error('LG refused signed registration'));
       return;
     }
     rejectedRegistration = undefined;

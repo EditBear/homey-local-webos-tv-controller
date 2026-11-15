@@ -77,7 +77,7 @@ function setup(t) {
 
 test('action registration and one reply for the unchanged raw source', async t => {
   assert.deepEqual(manifest.flow.actions.filter(card => card.id === cardId).map(card => card.args),
-    [[{name: 'webosDevice', type: 'device', filter: 'driver_id=webos_plus'}]]);
+    [[{name: 'webosDevice', type: 'device', filter: 'driver_id=webos_plus|webos_plus_manual'}]]);
   const f = setup(t);
   await f.device.initDevice();
   f.device._sourceNameReport.sourceId = live;

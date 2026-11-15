@@ -1,0 +1,33 @@
+<style>
+  .wp-field { margin-bottom: 16px; }
+  .wp-field label { display: block; font-weight: bold; margin-bottom: 4px; }
+  .wp-field input { width: 100%; box-sizing: border-box; padding: 8px; font-size: 16px; }
+  .wp-hint { font-size: 13px; opacity: .7; margin-top: 4px; }
+</style>
+
+<div class="wp-field">
+  <label for="wp-ip" data-i18n="pair.manual.ip"></label>
+  <input id="wp-ip" type="text" inputmode="decimal" placeholder="192.168.1.50" autocomplete="off">
+  <div class="wp-hint" data-i18n="pair.manual.ipHint"></div>
+</div>
+
+<div class="wp-field">
+  <label for="wp-mac" data-i18n="pair.manual.mac"></label>
+  <input id="wp-mac" type="text" placeholder="AA:BB:CC:DD:EE:FF" autocomplete="off">
+  <div class="wp-hint" data-i18n="pair.manual.macHint"></div>
+</div>
+
+
+<script type="application/javascript">
+  Homey.setTitle(Homey.__('pair.manual.title'))
+
+  function report() {
+    Homey.emit('manual_ip', {
+      ipAddress: document.getElementById('wp-ip').value,
+      macAddress: document.getElementById('wp-mac').value
+    }).catch(function () {})
+  }
+
+  document.getElementById('wp-ip').addEventListener('input', report)
+  document.getElementById('wp-mac').addEventListener('input', report)
+</script>

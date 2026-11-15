@@ -10,6 +10,13 @@
     "name": "Naam van de TV",
     "mac": "MAC adres",
     "ip": "IP adres",
-    "add": "Voeg toe"
+    "add": "Voeg toe",
+    "manual": {
+      "title": "Tv toevoegen via IP-adres",
+      "ip": "IP-adres van de tv",
+      "ipHint": "Gebruik \"webOS-tv (Automatisch)\" om automatisch op het netwerk te zoeken.",
+      "mac": "MAC-adres van de tv (optioneel)",
+      "macHint": "Alleen nodig om de tv aan te zetten met Wake-on-LAN. Homey kan dit niet opzoeken over VLAN's heen."
+    }
   }
 }

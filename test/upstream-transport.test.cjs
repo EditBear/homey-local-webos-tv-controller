@@ -372,6 +372,39 @@ test('the exact blacklist response does not send an unsigned register frame', bo
   assert.equal(connected, false);
 });
 
+test('with opt-in, the blacklist permits one unsigned request but readiness waits for TV authorisation', bounds, async t => {
+  const requests = fixturePeer(t, ['upgraded']);
+  const { client, errors } = createClient(t, { clientKey: null, allowUnsignedPairing: true });
+  const { wire, request } = await registration(requests);
+  assert.ok(request.payload.manifest.signed);
+  sendEnvelope(wire, { id: request.id, type: 'error', error: '403 Pairing rejected: blacklisted certificate detected' });
+  const unsigned = await waitFor(
+    () => clientMessages(wire).filter(frame => frame.type === 'register')[1], 'unsigned register frame');
+  assert.equal(unsigned.payload.manifest.signed, undefined);
+  const prompted = once(client, 'prompt');
+  sendEnvelope(wire, { id: unsigned.id, type: 'response', payload: { pairingType: 'PROMPT' } });
+  await prompted;
+  const unpaired = await new Promise(resolve => client.request(power, resolve));
+  assert.match(unpaired?.message ?? '', /not connected/i);
+  const saved = once(client, 'connect');
+  sendEnvelope(wire, { id: unsigned.id, type: 'registered', payload: { 'client-key': 'fixture-unsigned-key' } });
+  await saved;
+  assert.deepEqual(errors, []);
+});
+
+test('unsigned opt-in does not retry if TV authorisation is declined', bounds, async t => {
+  const requests = fixturePeer(t, ['upgraded']);
+  const { client, errors } = createClient(t, { clientKey: null, allowUnsignedPairing: true });
+  const { wire, request } = await registration(requests);
+  const prompted = once(client, 'prompt');
+  sendEnvelope(wire, { id: request.id, type: 'response', payload: { pairingType: 'PROMPT' } });
+  await prompted;
+  sendEnvelope(wire, { id: request.id, type: 'error', error: '403 cancelled' });
+  await waitFor(() => errors.length > 0, 'TV authorisation rejection');
+  assert.deepEqual(errors.map(error => error.message), ['403 cancelled']);
+  assert.deepEqual(clientMessages(wire).filter(frame => frame.type === 'register'), [request]);
+});
+
 test('concurrent playback replies keep the matching original LG envelope and settle once', bounds, async t => {
   const requests = fixturePeer(t, ['upgraded']);
   const { client, errors } = createClient(t);

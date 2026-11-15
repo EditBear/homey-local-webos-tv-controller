@@ -28,6 +28,7 @@ const {ARC_OUTPUT, MAX_STEPS, STEP_DELAY_MS, readArcVolume} = require('./webos/u
 const {SourceNameReport, SOURCE_NAME_CAPABILITY} = require('./webos/utils/source-name-report');
 const {ChannelReport, CHANNEL_CAPABILITY} = require('./webos/utils/channel-report');
 const net = require('net');
+const {normalizeMacAddress, isUsableIpv4} = require('./webos/utils/manual-setup');
 const {usableInputs, pickerValues, inputForApp, launchAppForInput} = require('./webos/utils/input-select');
 const https = require('https');
 
@@ -268,6 +269,28 @@ class WebosPlusDevice extends WebOSTV {
   }
 
   onSettings({oldSettings, newSettings, changedKeys}) {
+    if (changedKeys.includes('macAddress') && normalizeMacAddress(newSettings.macAddress) === null) {
+      return Promise.reject(new Error('The MAC address should look like AA:BB:CC:DD:EE:FF.'));
+    }
+    if (changedKeys.includes('ipAddress') && !isUsableIpv4(newSettings.ipAddress)) {
+      return Promise.reject(new Error('Please enter a valid IPv4 address.'));
+    }
+
+    // Homey stores the settings only after this hook returns.
+    const repairRequested = changedKeys.includes('resetPairing') &&
+      newSettings.resetPairing === true && oldSettings.resetPairing !== true;
+    const reconnectRequested = changedKeys.includes('ipAddress') || changedKeys.includes('allowUnsignedPairing');
+    if (repairRequested || reconnectRequested) {
+      this.homey.setTimeout(() => {
+        const previous = this._connectionSettingsWork || Promise.resolve();
+        this._connectionSettingsWork = previous
+          .then(() => this.applyConnectionSettings(repairRequested, reconnectRequested))
+          .catch(error => this.error('onSettings: could not apply the connection settings', error));
+        return this._connectionSettingsWork;
+      }, 500);
+      return Promise.resolve(true);
+    }
+
     if (oldSettings.usePoll !== newSettings.usePoll){
       this.lgtv.disconnect();
       this.construct();
@@ -278,6 +301,30 @@ class WebosPlusDevice extends WebOSTV {
       this.poll();
     }
     return Promise.resolve(true);
+  }
+
+  async applyConnectionSettings(repairRequested, reconnectRequested) {
+    if (this._channelStopped) return;
+    const repair = repairRequested && this.getSettings().resetPairing === true;
+    if (!repair && !reconnectRequested) return;
+
+    if (repair) {
+      await this.setSettings({resetPairing: false});
+      if (this._channelStopped) return;
+    }
+
+    this.lgtv?.disconnect();
+    if (repair) {
+      try {
+        await this._forgetPairingKey();
+      } catch (error) {
+        this.error('onSettings: could not remove the pairing key', error);
+      }
+    }
+    if (this._channelStopped) return;
+    this.construct();
+    this._connect();
+    await this.initDevice();
   }
 
   poll() {
