@@ -594,9 +594,10 @@ class WebosPlusDevice extends WebOSTV {
       if (!this.isCurrentInputPicker(picker)) return;
       const inputs = usableInputs(reported);
       const values = pickerValues(inputs);
-      const options = this.getCapabilityOptions(capabilities.inputSelect) ?? {};
-      if (!isDeepStrictEqual(options.values, values)) {
-        await this.setCapabilityOptions(capabilities.inputSelect, {...options, values});
+      // A newly added picker may have no device-level options to read yet.
+      if (!isDeepStrictEqual(this._inputPickerOptionValues, values)) {
+        await this.setCapabilityOptions(capabilities.inputSelect, {values});
+        this._inputPickerOptionValues = values;
       }
       if (!this.isCurrentInputPicker(picker)) return;
       picker.inputs = inputs;

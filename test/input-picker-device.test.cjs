@@ -38,7 +38,13 @@ function deferred() {
   return {promise, resolve, reject};
 }
 
-function setup({hasPicker = true, addPicker, fetchInputs = async () => [apple, movie]} = {}) {
+function setup({
+  hasPicker = true,
+  addPicker,
+  fetchInputs = async () => [apple, movie],
+  beforeOptionWrite,
+  rejectMissingPickerOptions = false,
+} = {}) {
   const device = new Device();
   const client = new EventEmitter();
   const declared = new Set(Object.values(capabilities));
@@ -88,9 +94,15 @@ function setup({hasPicker = true, addPicker, fetchInputs = async () => [apple, m
     if (id === picker) registered.push(id);
     listeners.set(id, callback);
   };
-  device.getCapabilityOptions = id => options.get(id) || {};
+  device.getCapabilityOptions = id => {
+    if (id === picker && rejectMissingPickerOptions && !options.has(id)) {
+      throw new Error('Invalid capability "webos_input"');
+    }
+    return options.get(id) || {};
+  };
   device.setCapabilityOptions = async (id, value) => {
     assert.ok(declared.has(id));
+    if (id === picker && beforeOptionWrite) await beforeOptionWrite(value);
     options.set(id, structuredClone(value));
     if (id === picker) pickerOptions.push(structuredClone(value.values));
   };
@@ -198,6 +210,51 @@ test('when foreground arrives before the input list, only the latest picker sele
   await settle();
   assert.equal(f.sourceReports.at(-1).source, 'netflix');
   assert.deepEqual(f.pickerValues, ['HDMI_1']);
+});
+
+test('a newly added picker publishes options even if Homey cannot read absent device overrides', async () => {
+  const f = setup({
+    hasPicker: false,
+    rejectMissingPickerOptions: true,
+    fetchInputs: async () => [{...movie, name: ''}],
+  });
+  await connect(f);
+  f.source(hdmi3);
+  await settle();
+
+  assert.deepEqual(f.added, [picker]);
+  assert.deepEqual(f.pickerOptions, [[{id: 'HDMI_3', title: {en: 'HDMI3'}}]]);
+  assert.deepEqual(f.pickerValues, ['HDMI_3']);
+  assert.deepEqual(f.sourceReports.map(report => report.source), [hdmi3]);
+  await f.choose('HDMI_3');
+  assert.deepEqual(f.commands, [{method: 'switch', id: 'HDMI_3'}]);
+});
+
+test('a rejected options write retries on the next connection and only changed options are sent again', async () => {
+  let writeAttempts = 0;
+  const f = setup({
+    fetchInputs: async count => count < 4 ? [movie] : [{...movie, name: 'LG DVD Player'}],
+    beforeOptionWrite: () => {
+      if (++writeAttempts === 1) throw new Error('Homey rejected the first options write');
+    },
+  });
+  const reconnect = async () => {
+    f.client.emit('close');
+    f.client.emit('connect');
+    await settle();
+  };
+  await connect(f);
+  assert.equal(writeAttempts, 1);
+  assert.deepEqual(f.pickerOptions, []);
+
+  await reconnect();
+  await reconnect();
+  assert.equal(writeAttempts, 2);
+  assert.deepEqual(f.pickerOptions, [[{id: 'HDMI_3', title: {en: 'Movie'}}]]);
+
+  await reconnect();
+  assert.equal(writeAttempts, 3);
+  assert.deepEqual(f.pickerOptions.at(-1), [{id: 'HDMI_3', title: {en: 'LG DVD Player'}}]);
 });
 
 test('a closed session cannot overwrite the next connection’s picker options or selection', async () => {
