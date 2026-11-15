@@ -1495,17 +1495,47 @@
               }
             },
             {
-              "id": "stepExternalArcVolume",
-              "type": "checkbox",
+              "id": "steppedVolumeOutput",
+              "type": "dropdown",
               "label": {
-                "en": "Step HDMI ARC volume",
-                "nl": "HDMI ARC-volume in stappen"
+                "en": "Step volume for this audio output",
+                "nl": "Volume in stappen voor deze geluidsuitgang"
               },
               "hint": {
-                "en": "Enable only if the TV reports the volume of your HDMI ARC sound system. Use the Sonos app or Sonos device in Homey to set Sonos volume.",
-                "nl": "Schakel dit alleen in als de tv het volume van je HDMI ARC-geluidssysteem rapporteert. Gebruik de Sonos-app of het Sonos-apparaat in Homey om het Sonos-volume in te stellen."
+                "en": "Choose the connected output only if the TV reliably reports its volume. Use the Sonos device to set Sonos volume.",
+                "nl": "Kies de aangesloten uitgang alleen als de tv het volume betrouwbaar meldt. Stel het Sonos-volume in via het Sonos-apparaat."
               },
-              "value": false
+              "value": "off",
+              "values": [
+                {
+                  "id": "off",
+                  "label": {
+                    "en": "Off",
+                    "nl": "Uit"
+                  }
+                },
+                {
+                  "id": "external_arc",
+                  "label": {
+                    "en": "HDMI ARC",
+                    "nl": "HDMI ARC"
+                  }
+                },
+                {
+                  "id": "external_optical",
+                  "label": {
+                    "en": "Optical",
+                    "nl": "Optisch"
+                  }
+                },
+                {
+                  "id": "bt_soundbar",
+                  "label": {
+                    "en": "Bluetooth soundbar",
+                    "nl": "Bluetooth-soundbar"
+                  }
+                }
+              ]
             },
             {
               "id": "manualIpAddress",
@@ -1711,17 +1741,47 @@
               }
             },
             {
-              "id": "stepExternalArcVolume",
-              "type": "checkbox",
+              "id": "steppedVolumeOutput",
+              "type": "dropdown",
               "label": {
-                "en": "Step HDMI ARC volume",
-                "nl": "HDMI ARC-volume in stappen"
+                "en": "Step volume for this audio output",
+                "nl": "Volume in stappen voor deze geluidsuitgang"
               },
               "hint": {
-                "en": "Enable only if the TV reports the volume of your HDMI ARC sound system. Use the Sonos app or Sonos device in Homey to set Sonos volume.",
-                "nl": "Schakel dit alleen in als de tv het volume van je HDMI ARC-geluidssysteem rapporteert. Gebruik de Sonos-app of het Sonos-apparaat in Homey om het Sonos-volume in te stellen."
+                "en": "Choose the connected output only if the TV reliably reports its volume. Use the Sonos device to set Sonos volume.",
+                "nl": "Kies de aangesloten uitgang alleen als de tv het volume betrouwbaar meldt. Stel het Sonos-volume in via het Sonos-apparaat."
               },
-              "value": false
+              "value": "off",
+              "values": [
+                {
+                  "id": "off",
+                  "label": {
+                    "en": "Off",
+                    "nl": "Uit"
+                  }
+                },
+                {
+                  "id": "external_arc",
+                  "label": {
+                    "en": "HDMI ARC",
+                    "nl": "HDMI ARC"
+                  }
+                },
+                {
+                  "id": "external_optical",
+                  "label": {
+                    "en": "Optical",
+                    "nl": "Optisch"
+                  }
+                },
+                {
+                  "id": "bt_soundbar",
+                  "label": {
+                    "en": "Bluetooth soundbar",
+                    "nl": "Bluetooth-soundbar"
+                  }
+                }
+              ]
             },
             {
               "id": "manualIpAddress",

@@ -24,7 +24,7 @@ const fetch = require('node-fetch');
 const WebOSTV = require('./webos/WebOSTV');
 const {capabilities, endpoints, store} = require('./webos/utils/constants');
 const {toLgVolume, fromLgVolume} = require('./webos/utils/numeric-volume');
-const {ARC_OUTPUT, MAX_STEPS, STEP_DELAY_MS, readArcVolume} = require('./webos/utils/volume-steps');
+const {STEPPED_OUTPUTS, MAX_STEPS, STEP_DELAY_MS, readExternalVolume} = require('./webos/utils/volume-steps');
 const {SourceNameReport, SOURCE_NAME_CAPABILITY} = require('./webos/utils/source-name-report');
 const {ChannelReport, CHANNEL_CAPABILITY} = require('./webos/utils/channel-report');
 const net = require('net');
@@ -689,8 +689,8 @@ class WebosPlusDevice extends WebOSTV {
     this.log(`soundOutputListener: Called`);
     const client = this.lgtv;
     this._soundOutputListener((newSoundOutput) => {
-      if (this._arcVolumeRun?.client === client && newSoundOutput !== ARC_OUTPUT) {
-        this._arcVolumeRun.cancelled = true;
+      if (this._externalVolumeRun?.client === client && newSoundOutput !== this._externalVolumeRun.output) {
+        this._externalVolumeRun.cancelled = true;
       }
       if (!this.checkOnOff(newSoundOutput)) {
         return;
@@ -889,16 +889,17 @@ class WebosPlusDevice extends WebOSTV {
   async volumeSet(value) {
     this.log(`volumeSet: Called`, value);
     const lgVolume = toLgVolume(value);
-    if (this._arcVolumeRun) {
-      this.assertArcVolumeRun(this._arcVolumeRun);
-      this._arcVolumeRun.target = lgVolume;
-      return this._arcVolumeRun.done;
+    if (this._externalVolumeRun) {
+      this.assertExternalVolumeRun(this._externalVolumeRun);
+      this._externalVolumeRun.target = lgVolume;
+      return this._externalVolumeRun.done;
     }
-    if (this.arcVolumeEnabled()) {
-      const run = {client: this.lgtv, target: lgVolume, cancelled: false};
-      this.assertArcVolumeRun(run);
-      this._arcVolumeRun = run;
-      run.done = this.stepArcVolume(run);
+    const output = this.getSettings().steppedVolumeOutput;
+    if (this.externalVolumeEnabled(output)) {
+      const run = {client: this.lgtv, output, target: lgVolume, cancelled: false};
+      this.assertExternalVolumeRun(run);
+      this._externalVolumeRun = run;
+      run.done = this.stepExternalVolume(run);
       return run.done;
     }
 
@@ -908,64 +909,64 @@ class WebosPlusDevice extends WebOSTV {
     await this._volumeSet(lgVolume);
   }
 
-  arcVolumeEnabled() {
-    return this.getSettings().stepExternalArcVolume === true &&
-      this.getStoreValue(store.currentSoundOutput) === ARC_OUTPUT;
+  externalVolumeEnabled(output) {
+    return STEPPED_OUTPUTS.has(output) && this.getSettings().steppedVolumeOutput === output &&
+      this.getStoreValue(store.currentSoundOutput) === output;
   }
 
-  assertArcVolumeRun(run) {
+  assertExternalVolumeRun(run) {
     if (run.cancelled || !run.client || this.lgtv !== run.client || this._channelStopped ||
-        !this.arcVolumeEnabled() || this.getCapabilityValue(capabilities.onOff) !== true) {
-      throw new Error('HDMI ARC volume change interrupted');
+        !this.externalVolumeEnabled(run.output) || this.getCapabilityValue(capabilities.onOff) !== true) {
+      throw new Error('External volume change interrupted');
     }
   }
 
-  async readCurrentArcVolume(run) {
-    this.assertArcVolumeRun(run);
+  async readCurrentExternalVolume(run) {
+    this.assertExternalVolumeRun(run);
     const reply = await new Promise((resolve, reject) => {
       run.client.request(endpoints.volume.get, (error, result) => {
         if (error) reject(error);
         else resolve(result);
       });
     });
-    this.assertArcVolumeRun(run);
-    const volume = readArcVolume(reply);
+    this.assertExternalVolumeRun(run);
+    const volume = readExternalVolume(reply, run.output);
     if (volume === null) {
-      throw new Error('HDMI ARC volume unavailable. Use the sound system controls.');
+      throw new Error('External volume unavailable. Use the sound system controls.');
     }
     return volume;
   }
 
-  async stepArcVolume(run) {
+  async stepExternalVolume(run) {
     const deadline = performance.now() + MAX_STEPS * STEP_DELAY_MS;
     const cancel = () => { run.cancelled = true; };
     try {
       run.client.once('close', cancel);
-      let current = await this.readCurrentArcVolume(run);
+      let current = await this.readCurrentExternalVolume(run);
       for (let steps = 0; current !== run.target; steps += 1) {
-        this.assertArcVolumeRun(run);
+        this.assertExternalVolumeRun(run);
         if (steps >= MAX_STEPS || performance.now() >= deadline) {
-          throw new Error('HDMI ARC volume change reached its step limit');
+          throw new Error('External volume change reached its step limit');
         }
         const requested = run.target;
         const direction = Math.sign(requested - current);
         if (direction > 0) await this._volumeUp();
         else await this._volumeDown();
-        this.assertArcVolumeRun(run);
+        this.assertExternalVolumeRun(run);
         await wait(STEP_DELAY_MS);
-        const next = await this.readCurrentArcVolume(run);
+        const next = await this.readCurrentExternalVolume(run);
         if (next === run.target) return;
         if ((next - current) * direction <= 0) {
-          throw new Error('HDMI ARC volume did not change as requested');
+          throw new Error('External volume did not change as requested');
         }
         if (run.target === requested && (requested - next) * direction < 0) {
-          throw new Error('HDMI ARC volume moved past the requested level');
+          throw new Error('External volume moved past the requested level');
         }
         current = next;
       }
     } finally {
       run.client.removeListener('close', cancel);
-      this._arcVolumeRun = null;
+      this._externalVolumeRun = null;
     }
   }
 
@@ -976,7 +977,7 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<void>}
    */
   async volumeMute(value) {
-    if (this._arcVolumeRun) this._arcVolumeRun.cancelled = true;
+    if (this._externalVolumeRun) this._externalVolumeRun.cancelled = true;
     this.log(`volumeMute: Called`, value);
     this.log(`volumeMute: Try to set mute to ${value}`);
     const response = await this._volumeMute(value);
@@ -992,7 +993,7 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<void>}
    */
   async volumeUp() {
-    if (this._arcVolumeRun) this._arcVolumeRun.cancelled = true;
+    if (this._externalVolumeRun) this._externalVolumeRun.cancelled = true;
     this.log(`volumeUp: Called`);
     // The step size/result depends on the audio output; wait for its numeric report.
     await this._volumeUp();
@@ -1003,7 +1004,7 @@ class WebosPlusDevice extends WebOSTV {
    * @returns {Promise<void>}
    */
   async volumeDown() {
-    if (this._arcVolumeRun) this._arcVolumeRun.cancelled = true;
+    if (this._externalVolumeRun) this._externalVolumeRun.cancelled = true;
     this.log(`volumeDown: Called`);
     await this._volumeDown();
   }

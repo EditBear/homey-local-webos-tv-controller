@@ -20,7 +20,7 @@ try {
   Module._load = originalLoad;
 }
 const {capabilities, endpoints, store} = require(path.join(deviceDir, 'webos/utils/constants'));
-const {readArcVolume} = require(path.join(deviceDir, 'webos/utils/volume-steps'));
+const {readExternalVolume} = require(path.join(deviceDir, 'webos/utils/volume-steps'));
 const {get: read, set, up, down, mute} = endpoints.volume;
 
 function report(level, fields = {}) {
@@ -29,7 +29,7 @@ function report(level, fields = {}) {
   }};
 }
 
-function setup({enabled = true, output = 'external_arc', level = 20} = {}) {
+function setup({enabled = true, output = 'external_arc', setting = output, level = 20} = {}) {
   const device = new Device();
   const client = new EventEmitter();
   const calls = [];
@@ -39,7 +39,7 @@ function setup({enabled = true, output = 'external_arc', level = 20} = {}) {
   device.log = () => {};
   device.error = () => {};
   device.lgtv = client;
-  device.getSettings = () => ({stepExternalArcVolume: state.enabled});
+  device.getSettings = () => ({steppedVolumeOutput: state.enabled ? setting : 'off'});
   device.getStoreValue = id => id === store.currentSoundOutput ? state.output : undefined;
   device.getCapabilityValue = id => id === capabilities.onOff ? state.on : null;
   device.setCapabilityValue = async (id, value) => writes.push({id, value});
@@ -67,12 +67,17 @@ function uris(calls) {
   return calls.map(([uri]) => uri);
 }
 
-test('the ARC setting defaults to off for the existing driver', () => {
+test('both drivers default to off and require a specific external output to be selected', () => {
   const manifest = require(path.join(packageDir, 'app.json'));
-  const setting = manifest.drivers.find(driver => driver.id === 'webos_plus').settings
-    .flatMap(group => group.children).find(item => item.id === 'stepExternalArcVolume');
-  assert.equal(setting.type, 'checkbox');
-  assert.equal(setting.value, false);
+  for (const driver of manifest.drivers) {
+    const setting = driver.settings.flatMap(group => group.children)
+      .find(item => item.id === 'steppedVolumeOutput');
+    assert.equal(setting.type, 'dropdown');
+    assert.equal(setting.value, 'off');
+    assert.deepEqual(setting.values.map(option => option.id), [
+      'off', 'external_arc', 'external_optical', 'bt_soundbar',
+    ]);
+  }
 });
 
 test('the existing absolute control stays in Homey units for current settings and other outputs', async () => {
@@ -80,8 +85,8 @@ test('the existing absolute control stays in Homey units for current settings an
     {enabled: false},
     {enabled: undefined, output: ''},
     {output: 'tv_speaker'},
-    {output: 'external_optical'},
-    {output: 'bt_soundbar'},
+    {enabled: false, output: 'external_optical'},
+    {output: 'bt_soundbar', setting: 'external_arc'},
   ]) {
     const {device, calls, writes} = setup(config);
     await device.volumeSet(0.23);
@@ -101,6 +106,15 @@ test('ARC volume steps use a fresh same-route measurement before and after each 
   await device.volumeSet(0.21);
   assert.equal(state.level, 21);
   assert.deepEqual(uris(calls), [read, down, read]);
+});
+
+test('optical and Bluetooth use the same measured steps with explicit selection', async () => {
+  for (const output of ['external_optical', 'bt_soundbar']) {
+    const {device, calls, state} = setup({output});
+    await device.volumeSet(0.19);
+    assert.equal(state.level, 19);
+    assert.deepEqual(uris(calls), [read, down, read]);
+  }
 });
 
 test('matching target and measured zero are distinguished from unknown', async () => {
@@ -131,9 +145,9 @@ test('missing, ambiguous, muted or non-ARC measurements prevent any external wri
     await assert.rejects(device.volumeSet(0.80), /volume unavailable/);
     assert.deepEqual(uris(calls), [read]);
   }
-  assert.equal(readArcVolume({
+  assert.equal(readExternalVolume({
     returnValue: true, soundOutput: 'external_arc', volume: 20, maxVolume: 100, muted: false,
-  }), 20);
+  }, 'external_arc'), 20);
 });
 
 test('an ARC acknowledgement without measured progress stops after one adjustment', async () => {
@@ -167,7 +181,7 @@ test('reconnection on the same adapter stops the in-flight ARC run', async () =>
 });
 
 test('a changed setting or sound output stops the ARC run after its current command', async () => {
-  for (const change of [state => { state.enabled = false; }, state => { state.output = 'tv_speaker'; }]) {
+  for (const change of [state => { state.enabled = false; }, state => { state.output = 'bt_soundbar'; }]) {
     const {device, calls, state} = setup();
     state.afterStep = () => change(state);
     await assert.rejects(device.volumeSet(0.26), /interrupted/);
