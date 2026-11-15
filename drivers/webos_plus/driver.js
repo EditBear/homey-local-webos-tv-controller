@@ -318,64 +318,30 @@ class WebosPlusDriver extends Homey.Driver {
 
   actionSendToastWithImage() {
     this._actionSendToastWithImage
-      .registerRunListener((args, state) => {
-        const device = args.webosDevice
-        const {
-          message,
-          droptoken,
-        } = args
+      .registerRunListener(async ({webosDevice, message, droptoken}) => {
         let icon = ''
-        return new Promise(async (resolve, reject) => {
-          if (droptoken) {
-            const imageStream = await droptoken.getStream()
-            icon = await new Promise((resolve) => {
-              imageStream.setEncoding('binary')
-              const type = imageStream.contentType
-              this.log('DRIVER TYPE', type)
-              const prefix = `data:${ type };base64,`
-              let body = ''
-
-              imageStream.on('data', (chunk) => {
-                body += chunk
-              })
-
-              imageStream.on('end', () => {
-                const base64 = Buffer.from(body, 'binary').toString('base64')
-                const data = prefix + base64
-                return resolve(data)
-              })
-            })
+        if (droptoken) {
+          const imageStream = await droptoken.getStream()
+          imageStream.setEncoding('binary')
+          const type = imageStream.contentType
+          this.log('DRIVER TYPE', type)
+          let body = ''
+          for await (const chunk of imageStream) {
+            body += chunk
           }
+          icon = `data:${ type };base64,${ Buffer.from(body, 'binary').toString('base64') }`
+        }
 
-          device._toastSend(message, icon).then(() => {
-            resolve(true)
-          }, () => {
-            resolve(true)
-          })
-        })
+        return webosDevice._toastSend(message, icon).then(() => true, () => true)
       })
   }
 
   actionSendToast() {
     this._actionSendToast
-      .registerRunListener((args, state) => {
-        const device = args.webosDevice
-        const {
-          message,
-          iconData,
-        } = args
-        let icon = iconData
-        return new Promise(async (resolve, reject) => {
-          if (this._isUrl(iconData)) {
-            icon = await this.encodeImage(iconData)
-          }
-
-          device._toastSend(message, icon).then(() => {
-            resolve(true)
-          }, (error) => {
-            reject(error)
-          })
-        })
+      .registerRunListener(async ({webosDevice, message, iconData}) => {
+        const icon = this._isUrl(iconData) ? await this.encodeImage(iconData) : iconData
+        await webosDevice._toastSend(message, icon)
+        return true
       })
   }
 
@@ -478,21 +444,18 @@ class WebosPlusDriver extends Homey.Driver {
   }
 
   async _mapDiscoveryResults(result) {
-    return new Promise(async (resolve, _reject) => {
-      const info = await WebosPlusDriver._getInfo(result.headers.location).catch(this.error)
-      const macAddress = await this.homey.arp.getMAC(result.address).catch(this.error)
-      const device = {
-        name: info && info.friendlyName ? info.friendlyName : result.address,
-        data: {
-          id: result.id.replace(/uuid:/g, ''),
-        },
-        settings: {
-          macAddress,
-          ipAddress: result.address,
-        },
-      }
-      resolve(device)
-    })
+    const info = await WebosPlusDriver._getInfo(result.headers.location).catch(error => this.error(error))
+    const macAddress = await this.homey.arp.getMAC(result.address).catch(error => this.error(error))
+    return {
+      name: info && info.friendlyName ? info.friendlyName : result.address,
+      data: {
+        id: result.id.replace(/uuid:/g, ''),
+      },
+      settings: {
+        macAddress,
+        ipAddress: result.address,
+      },
+    }
   }
 
   async onPairListDevices(data, callback) {
@@ -538,7 +501,7 @@ class WebosPlusDriver extends Homey.Driver {
         response.on('error', (err) => {
           reject(err)
         })
-      })
+      }).on('error', reject)
     })
   }
 
@@ -578,7 +541,7 @@ class WebosPlusDriver extends Homey.Driver {
           const data = prefix + base64
           return resolve(data)
         })
-      })
+      }).on('error', reject)
     })
   }
 
