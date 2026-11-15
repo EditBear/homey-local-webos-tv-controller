@@ -14,6 +14,7 @@ function lgFailure(reply) {
   const error = new Error(detail);
   error.isLGResponseFailure = true;
   error.lgResponseType = reply.type;
+  if (payload.returnValue === false) error.lgReturnValue = false;
   if (reply.error !== undefined) error.lgError = reply.error;
   const code = reply.errorCode ?? payload.errorCode;
   if (code !== undefined) error.code = error.lgErrorCode = code;

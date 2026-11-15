@@ -460,6 +460,30 @@ test('background channel 500 is identifiable and a nested volume report stays un
   assert.deepEqual(errors, []);
 });
 
+test('the adapter distinguishes an explicit input refusal from a missing reply payload', bounds, async t => {
+  const requests = fixturePeer(t, ['upgraded']);
+  const { client, errors } = createClient(t);
+  const wire = await finishRegistration(client, requests);
+  const endpoint = 'ssap://tv/switchInput';
+  const observed = [];
+
+  client.request(endpoint, {inputId: 'HDMI_3'}, (error, payload) => observed.push({error, payload}));
+  const refused = await waitForFrame(wire, 'request', endpoint);
+  response(wire, refused.id, {returnValue: false});
+  await waitFor(() => observed.length === 1, 'explicit input rejection');
+  assert.equal(observed[0].error.lgResponseType, 'response');
+  assert.equal(observed[0].error.lgReturnValue, false);
+
+  client.request(endpoint, {inputId: 'HDMI_1'}, (error, payload) => observed.push({error, payload}));
+  const missing = await waitFor(() => clientMessages(wire)
+    .find(message => message.uri === endpoint && message.id !== refused.id), 'second input request');
+  sendEnvelope(wire, {id: missing.id, type: 'response'});
+  await waitFor(() => observed.length === 2, 'missing payload');
+  assert.equal(observed[1].error.lgResponseType, 'response');
+  assert.equal(observed[1].error.lgReturnValue, undefined);
+  assert.deepEqual(errors, []);
+});
+
 test('the button socket writes the legacy frame and closes with its main connection', bounds, async t => {
   const requests = fixturePeer(t, ['upgraded', 'upgraded']);
   const { client, errors } = createClient(t);

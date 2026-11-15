@@ -3,8 +3,7 @@
 const SOURCE_NAME_CAPABILITY = 'speaker_artist';
 const LIVE_TV_ID = 'com.webos.app.livetv';
 // Display formatting only: raw source identities and events are untouched.
-const fallbackName = id => {
-  if (id === LIVE_TV_ID) return 'Live TV';
+const hdmiDisplayName = id => {
   const port = /^com\.webos\.app\.hdmi([1-4])$/.exec(id)?.[1];
   return port ? `HDMI${port}` : '';
 };
@@ -65,7 +64,7 @@ class SourceNameReport {
 
     const app = apps.find(entry => entry.id === ticket.id);
     const name = app && typeof app.name === 'string' && app.name.trim().length
-      ? app.name : fallbackName(ticket.id);
+      ? app.name : (ticket.id === LIVE_TV_ID ? 'Live TV' : hdmiDisplayName(ticket.id));
     // Avoid repeating the initial write for this report, even if it failed.
     if (name !== ticket.initialName) this.publish(name);
   }
@@ -98,4 +97,4 @@ class SourceNameReport {
   }
 }
 
-module.exports = {SourceNameReport, SOURCE_NAME_CAPABILITY};
+module.exports = {SourceNameReport, SOURCE_NAME_CAPABILITY, hdmiDisplayName};

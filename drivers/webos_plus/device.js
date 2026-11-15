@@ -18,6 +18,7 @@
 
 'use strict';
 
+const {isDeepStrictEqual} = require('node:util');
 const fetch = require('node-fetch');
 const WebOSTV = require('./webos/WebOSTV');
 const {capabilities, store} = require('./webos/utils/constants');
@@ -25,7 +26,7 @@ const {toLgVolume, fromLgVolume} = require('./webos/utils/numeric-volume');
 const {SourceNameReport, SOURCE_NAME_CAPABILITY} = require('./webos/utils/source-name-report');
 const {ChannelReport, CHANNEL_CAPABILITY} = require('./webos/utils/channel-report');
 const net = require('net');
-const {usableInputs, pickerValues, inputForApp} = require('./webos/utils/input-select');
+const {usableInputs, pickerValues, inputForApp, launchAppForInput} = require('./webos/utils/input-select');
 const https = require('https');
 
 const unsecureHttpsAgent = new https.Agent({
@@ -150,7 +151,15 @@ class WebosPlusDevice extends WebOSTV {
     if (this.getSettings().usePoll) {
       this.poll();
     }
-    this.lgtv.on('connect', () => {
+    const client = this.lgtv;
+    this.prepareInputSelect();
+    client.on('close', () => {
+      if (this._inputPicker?.client === client) this._inputPicker = null;
+    });
+    client.on('connect', () => {
+      if (this._channelStopped || this.lgtv !== client) return;
+      const picker = {client, inputs: [], appId: null, selection: 0};
+      this._inputPicker = picker;
       if (!this.getSettings().usePoll) {
         this.powerStateListener();
       }
@@ -160,7 +169,7 @@ class WebosPlusDevice extends WebOSTV {
       this.channelListener();
       this.appListener();
       this.soundOutputListener();
-      this.refreshInputSelect().catch(error => this.error('refreshInputSelect', error));
+      this.refreshInputSelect(picker).catch(error => this.error('Input picker refresh', error));
     });
     this.lgtv.on('error', (error) => {
       if (error.code === 'EHOSTUNREACH') {
@@ -203,12 +212,7 @@ class WebosPlusDevice extends WebOSTV {
       await this.addCapability(capabilities.speakerPrev);
     }
 
-    if (!this.hasCapability(capabilities.inputSelect)) {
-      await this.addCapability(capabilities.inputSelect);
-    }
-
     this.registerCapabilityListener(capabilities.onOff, this.toggleOnOff.bind(this));
-    this.registerCapabilityListener(capabilities.inputSelect, this.inputSelect.bind(this));
     this.registerCapabilityListener(capabilities.volumeSet, this.volumeSet.bind(this));
     this.registerCapabilityListener(capabilities.volumeMute, this.volumeMute.bind(this));
     this.registerCapabilityListener(capabilities.volumeUp, this.volumeUp.bind(this));
@@ -452,6 +456,7 @@ class WebosPlusDevice extends WebOSTV {
     this.log(`appListener: Called`);
     const report = this._sourceNameReport;
     const client = this.lgtv;
+    const picker = this._inputPicker;
     const generation = report ? report.reset() : null;
     const channelReport = this._channelReport;
     const channelGeneration = channelReport ? channelReport.generation : null;
@@ -468,8 +473,6 @@ class WebosPlusDevice extends WebOSTV {
       if (typeof newAppId !== 'string' || newAppId.trim() === '') {
         return;
       }
-
-      this.syncInputSelect(newAppId);
 
       // A fresh report is useful even when the source did not change. Reuse
       // the current reporter ticket; do not alter its display/channel work.
@@ -500,6 +503,11 @@ class WebosPlusDevice extends WebOSTV {
           this.log(`appListener: Flow trigger app/input changed`);
           this._driver.triggerAppChanged(this, flowValues, {...flowValues});
         }
+      }
+
+      if (this.isCurrentInputPicker(picker)) {
+        picker.appId = newAppId;
+        this.queueInputPickerUpdate(() => this.syncInputSelect(picker));
       }
 
       this.log(`appListener: Gather media screen information for ${newAppId}`);
@@ -544,52 +552,83 @@ class WebosPlusDevice extends WebOSTV {
     });
   }
 
-  /**
-   * Fill the input picker with the TV's external inputs, or HDMI 1-4 when the
-   * TV does not return them. The TV may already be connected before the picker
-   * exists, so this also runs once shortly after startup.
-   */
-  async refreshInputSelect() {
-    const client = this.lgtv;
-    const reported = await this._externalInputList().catch((error) => {
-      this.log('refreshInputSelect: Could not get the input list, using default HDMI inputs', error);
-      return null;
-    });
-    if (this._channelStopped || client !== this.lgtv) return;
-
-    this._inputs = usableInputs(reported);
-    const values = pickerValues(this._inputs);
-    this.log(`refreshInputSelect: Set ${values.length} inputs`);
-    await this.setCapabilityOptions(capabilities.inputSelect, {values});
-    this.syncInputSelect(this.getStoreValue(store.currentApp));
-  }
-
-  /**
-   * Show the active input in the picker. Apps keep the last input selected.
-   */
-  syncInputSelect(appId) {
-    const input = inputForApp(this._inputs, appId);
-    if (!input) return;
-    this.setCapabilityValue(capabilities.inputSelect, `${input.id}`)
-      .catch(error => this.error('state report: input select', error));
-  }
-
-  /**
-   * Switch input from the picker. Falls back to launching the input's app.
-   */
-  async inputSelect(value) {
-    this.log(`inputSelect: Called`, value);
-    const input = (this._inputs || []).find(input => `${input.id}` === value);
-    try {
-      await this._switchInput(value);
-    } catch (error) {
-      if (!input || !input.appId) {
-        throw new Error(`The TV refused the input change: ${error && error.message ? error.message : error}`);
-      }
-      this.log(`inputSelect: switchInput failed, launching ${input.appId} instead`, error);
-      await this._appLaunch(input.appId).catch((launchError) => {
-        throw new Error(`The TV refused the input change: ${launchError && launchError.message ? launchError.message : launchError}`);
+  // The optional picker starts alongside the existing TV reporting.
+  prepareInputSelect() {
+    if (!this._inputPickerSetup) {
+      this._inputPickerSetup = Promise.resolve().then(async () => {
+        if (this._channelStopped) return false;
+        if (!this.hasCapability(capabilities.inputSelect)) {
+          await this.addCapability(capabilities.inputSelect);
+        }
+        if (this._channelStopped) return false;
+        this.registerCapabilityListener(capabilities.inputSelect, this.inputSelect.bind(this));
+        return true;
+      }).catch(error => {
+        this.error('Input picker setup', error);
+        return false;
       });
+    }
+    return this._inputPickerSetup;
+  }
+
+  isCurrentInputPicker(picker) {
+    return Boolean(picker && this._inputPicker === picker && this.lgtv === picker.client && !this._channelStopped);
+  }
+
+  queueInputPickerUpdate(update) {
+    // Keep Homey option and value writes in order, even across a reconnect.
+    this._inputPickerUpdates = (this._inputPickerUpdates ?? Promise.resolve())
+      .then(update).catch(error => this.error('Input picker update', error));
+    return this._inputPickerUpdates;
+  }
+
+  async refreshInputSelect(picker) {
+    if (!await this.prepareInputSelect() || !this.isCurrentInputPicker(picker)) return;
+    let reported;
+    try {
+      reported = await this._externalInputList();
+    } catch (error) {
+      if (this.isCurrentInputPicker(picker)) this.log('Input picker: could not read LG input list', error);
+    }
+    return this.queueInputPickerUpdate(async () => {
+      if (!this.isCurrentInputPicker(picker)) return;
+      const inputs = usableInputs(reported);
+      const values = pickerValues(inputs);
+      const options = this.getCapabilityOptions(capabilities.inputSelect) ?? {};
+      if (!isDeepStrictEqual(options.values, values)) {
+        await this.setCapabilityOptions(capabilities.inputSelect, {...options, values});
+      }
+      if (!this.isCurrentInputPicker(picker)) return;
+      picker.inputs = inputs;
+      await this.syncInputSelect(picker);
+    });
+  }
+
+  async syncInputSelect(picker) {
+    if (!this.isCurrentInputPicker(picker)) return;
+    const input = inputForApp(picker.inputs, picker.appId);
+    // A foreground app outside the picker leaves the last input selected.
+    if (input && this.getCapabilityValue(capabilities.inputSelect) !== String(input.id)) {
+      await this.setCapabilityValue(capabilities.inputSelect, String(input.id));
+    }
+  }
+
+  async inputSelect(value) {
+    const picker = this._inputPicker;
+    if (!this.isCurrentInputPicker(picker)) throw new Error('TV input picker is unavailable');
+    const input = picker.inputs.find(entry => String(entry.id) === value);
+    if (!input) throw new Error('Choose an input from the current TV input list');
+
+    const selection = ++picker.selection;
+    try {
+      await this._switchInput(input.id);
+    } catch (error) {
+      const appId = launchAppForInput(input);
+      const explicitRefusal = error?.lgResponseType === 'error' || error?.lgReturnValue === false;
+      if (!explicitRefusal || !appId || !this.isCurrentInputPicker(picker) || selection !== picker.selection) {
+        throw error;
+      }
+      await this._appLaunch(appId);
     }
   }
 
