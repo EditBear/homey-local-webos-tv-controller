@@ -1,6 +1,8 @@
-# Local webOS TV Controller 2.0.2
+# Local webOS TV Controller 2.0.3
 
 Local webOS TV Controller provides local LG webOS control, source and channel reporting, and Flow cards for TV commands. The source-reported trigger provides the raw source ID and report time, including fresh reports of the same source. Use Request current TV source to ask a connected TV for its current source.
+
+Sascha’s Input picker lets you select an HDMI source from the TV device in Homey. It uses the TV’s input labels, defaults to HDMI 1–4 when labels are unavailable and follows input changes reported by the TV.
 
 The TV was confirmed on supplies the time of an LG Active report to Flows using the power listener. Use it to sequence wake-to-input Flows.
 
@@ -19,7 +21,7 @@ Original contributor credits, copyright notices and GPL-3.0-or-later licence are
 
 ## Test release and source history
 
-The current source matches **Homey Test 2.0.2, Build 13**. This release fixes crashes during TV discovery and when loading images for on-screen notifications. It does not include the experimental Live TV channel retry. [2.0.2 changelog](CHANGELOG-2.0.2.md) · [Homey Test](https://homey.app/a/com.rompa.webos-plus-g4/test/)
+This source prepares 2.0.3 for Homey Test. It includes the 2.0.2 discovery and notification crash fixes and the tested HDMI picker. [2.0.3 changelog](CHANGELOG-2.0.3.md) · [2.0.2 changelog](CHANGELOG-2.0.2.md)
 
 Tags `v2.0.1` and `v2.0.0` preserve Homey Test Builds 12 and 11, and tag `v1.0.43` preserves the earlier Store release source. [2.0.1 changelog](CHANGELOG-2.0.1.md) · [2.0.0 and earlier history](CHANGELOG-2.0.0.md) · [Homey Community thread](https://community.homey.app/t/lg-webos-better-integration/15007/552)
 

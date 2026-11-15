@@ -1,6 +1,8 @@
-Lokale webOS-tv-controller 2.0.1
+Lokale webOS-tv-controller 2.0.3
 
 Local webOS TV Controller biedt lokale bediening van LG webOS-tv’s, bron- en kanaalrapportage en Flow-kaarten voor tv-opdrachten. De trigger voor bronrapportage geeft de bron-ID en het tijdstip door, ook bij een nieuw rapport over dezelfde bron. Met Vraag de huidige tv-bron op kun je de actuele bron bij een verbonden tv opvragen.
+
+Met Sascha’s ingangskeuze kun je een HDMI-bron kiezen op het tv-apparaat in Homey. De keuzelijst gebruikt de namen van de tv, valt terug op HDMI 1–4 als die namen ontbreken en volgt de ingang die de tv meldt.
 
 De kaart De tv bevestigde dat hij aan staat geeft Flows het tijdstip waarop de tv via de powerlistener meldt dat hij actief is. Gebruik deze kaart om Flows voor het inschakelen van de tv en het wisselen van ingang op elkaar af te stemmen.
 

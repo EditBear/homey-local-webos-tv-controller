@@ -1,4 +1,8 @@
 {
+  "2.0.3": {
+    "en": "Adds Sascha’s HDMI input picker to the TV device with LG labels and HDMI 1–4 fallbacks. Existing TV pairing, Flow cards and raw source IDs are preserved.",
+    "nl": "Voegt Sascha’s HDMI-ingangskeuze toe aan het tv-apparaat, met LG-ingangsnamen en HDMI 1–4 als terugvalopties. Bestaande tv-koppelingen, Flow-kaarten en bron-ID’s blijven behouden."
+  },
   "2.0.2": {
     "en": "Handles network errors when discovering TVs and loading toast icons. Toast and Gallery Flow actions now report unreadable images as errors without crashing the app. No change to Live TV channel reporting.",
     "nl": "Vangt netwerkfouten op bij het zoeken naar tv’s en het laden van meldingspictogrammen. Flow-acties voor meldingen en galerijafbeeldingen melden onleesbare afbeeldingen als fout zonder dat de app crasht. De kanaalrapportage voor live-tv is ongewijzigd."
