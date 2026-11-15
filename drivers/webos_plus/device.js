@@ -82,11 +82,7 @@ class WebosPlusDevice extends WebOSTV {
     if (this.getSettings().manualIpAddress === true && ipAddress !== '0.0.0.0'){
       return Promise.resolve(true);
     }
-    if (ipAddress !== discoveryResult.address) {
-      this.setSettings({ipAddress: discoveryResult.address}).then(() => {
-        this._connect();
-      }).catch(this.error);
-    }
+    this.saveDiscoveredAddress(discoveryResult.address, ipAddress);
     return Promise.resolve(true);
   }
 
@@ -96,12 +92,27 @@ class WebosPlusDevice extends WebOSTV {
     if (this.getSettings().manualIpAddress === true && ipAddress !== '0.0.0.0'){
       return Promise.resolve(true);
     }
-    if (ipAddress !== discoveryResult.address) {
-      this.setSettings({ipAddress: discoveryResult.address}).then(() => {
-        this._connect();
-      }).catch(this.error);
-    }
+    this.saveDiscoveredAddress(discoveryResult.address, ipAddress);
     return Promise.resolve(true);
+  }
+
+  saveDiscoveredAddress(address, savedAddress) {
+    const previous = this._discoveryAddressWrite;
+    if (address === (previous?.address ?? savedAddress)) return;
+
+    const update = {address};
+    this._discoveryAddressWrite = update;
+    const save = () => this.setSettings({ipAddress: address});
+    update.done = (previous ? previous.done.then(save) : save())
+      .then(() => {
+        if (this._discoveryAddressWrite === update && !this._resettingPairing && !this._channelStopped) {
+          this._connect();
+        }
+      })
+      .catch(error => this.error(error))
+      .finally(() => {
+        if (this._discoveryAddressWrite === update) this._discoveryAddressWrite = null;
+      });
   }
 
   onDiscoveryLastSeenChanged(discoveryResult) {
@@ -113,7 +124,7 @@ class WebosPlusDevice extends WebOSTV {
   advanceRediscoveryRetry(discoveryResult, ipAddress) {
     const id = discoveryResult?.id;
     const deviceId = this.getData()?.id;
-    if (this._channelStopped || !deviceId || typeof id !== 'string' ||
+    if (this._channelStopped || this._resettingPairing || !deviceId || typeof id !== 'string' ||
         id.replace(/^uuid:/, '') !== deviceId || discoveryResult.address !== ipAddress ||
         typeof ipAddress !== 'string' || !net.isIP(ipAddress) || ipAddress === '0.0.0.0' || ipAddress === '::') return;
 
@@ -291,6 +302,7 @@ class WebosPlusDevice extends WebOSTV {
       return Promise.resolve(true);
     }
 
+    if (this._resettingPairing) return Promise.resolve(true);
     if (oldSettings.usePoll !== newSettings.usePoll){
       this.lgtv.disconnect();
       this.construct();
@@ -311,19 +323,29 @@ class WebosPlusDevice extends WebOSTV {
     if (repair) {
       await this.setSettings({resetPairing: false});
       if (this._channelStopped) return;
+      this._resettingPairing = true;
     }
 
-    this.lgtv?.disconnect();
-    if (repair) {
-      try {
-        await this._forgetPairingKey();
-      } catch (error) {
-        this.error('onSettings: could not remove the pairing key', error);
+    try {
+      this.lgtv?.disconnect();
+      if (repair) {
+        try {
+          await this._forgetPairingKey();
+        } catch (error) {
+          this.error('onSettings: could not remove the pairing key', error);
+        }
+        // A pending discovery can finish after the key was removed. Open the
+        // new connection once using the latest address written by discovery.
+        while (this._discoveryAddressWrite && !this._channelStopped) {
+          await this._discoveryAddressWrite.done;
+        }
       }
+      if (this._channelStopped) return;
+      this.construct();
+      this._connect();
+    } finally {
+      if (repair) this._resettingPairing = false;
     }
-    if (this._channelStopped) return;
-    this.construct();
-    this._connect();
     await this.initDevice();
   }
 
@@ -333,9 +355,12 @@ class WebosPlusDevice extends WebOSTV {
     }
 
     this.pollInterval = setInterval(() => {
+      if (this._resettingPairing || this._channelStopped) return;
+      const connection = this.lgtv;
+      const isCurrent = () => !this._resettingPairing && !this._channelStopped && this.lgtv === connection;
       const client = new net.Socket();
       const cancel = setTimeout(() => {
-        if (this.getCapabilityValue(capabilities.onOff)){
+        if (isCurrent() && this.getCapabilityValue(capabilities.onOff)){
           this.setCapabilityValue(capabilities.onOff, false)
             .catch(error => this.error('state report: poll/timeout onoff', error));
         }
@@ -343,7 +368,7 @@ class WebosPlusDevice extends WebOSTV {
       }, this.getSettings().pollTimeout * 1000);
 
       client.on('error', (error) => {
-        if (this.getCapabilityValue(capabilities.onOff)){
+        if (isCurrent() && this.getCapabilityValue(capabilities.onOff)){
           this.setCapabilityValue(capabilities.onOff, false)
             .catch(error => this.error('state report: poll/error onoff', error));
         }
@@ -353,7 +378,7 @@ class WebosPlusDevice extends WebOSTV {
       });
 
       client.connect(3000, this.getSettings().ipAddress, () => {
-        if (!this.getCapabilityValue(capabilities.onOff)) {
+        if (isCurrent() && !this.getCapabilityValue(capabilities.onOff)) {
           this.setCapabilityValue(capabilities.onOff, true)
             .catch(error => this.error('state report: poll/connect onoff', error));
           if (!this.subsSet) {

@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const Module = require('node:module');
+const net = require('node:net');
 const path = require('node:path');
 const test = require('node:test');
 
@@ -41,6 +42,12 @@ function setup(settings = base) {
   };
   const run = async () => { for (const timer of timers.splice(0)) await timer(); };
   return {device, calls, save, run};
+}
+
+function deferred() {
+  let resolve;
+  const promise = new Promise(done => { resolve = done; });
+  return {promise, resolve};
 }
 
 test('explicitly ticking Re-pair consumes the checkbox, forgets the key and reconnects once', async () => {
@@ -111,4 +118,96 @@ test('failed checkbox save leaves the current connection and key intact', async 
   await save({resetPairing: true});
   await run();
   assert.deepEqual(calls, [['onSettings: could not apply the connection settings', failure]]);
+});
+
+test('discovery writes crossing re-pair preserve the latest address and open only after removing the key', async () => {
+  const {device, calls, save, run} = setup();
+  const startedDeleting = deferred();
+  const allowDelete = deferred();
+  const firstWrite = deferred();
+  const startedLatestWrite = deferred();
+  const latestWrite = deferred();
+  const firstAddress = '192.0.2.11';
+  const latestAddress = base.ipAddress;
+  const originalSetSettings = device.setSettings;
+  let key = 'old key';
+  device.setAvailable = () => {};
+  device.getData = () => ({id: 'fixture-tv'});
+  device.setSettings = async values => {
+    if (values.ipAddress === firstAddress) await firstWrite.promise;
+    if (values.ipAddress === latestAddress) {
+      startedLatestWrite.resolve();
+      await latestWrite.promise;
+    }
+    await originalSetSettings(values);
+  };
+  device._forgetPairingKey = async () => {
+    calls.push('start forget');
+    startedDeleting.resolve();
+    await allowDelete.promise;
+    key = null;
+    calls.push('finish forget');
+  };
+  device._connect = () => calls.push(['connect', device.getSettings().ipAddress, key]);
+
+  await device.onDiscoveryAvailable({id: 'fixture-tv', address: firstAddress});
+  await save({resetPairing: true});
+  const repaired = run();
+  await startedDeleting.promise;
+  await device.onDiscoveryAddressChanged({id: 'fixture-tv', address: latestAddress});
+
+  allowDelete.resolve();
+  firstWrite.resolve();
+  await startedLatestWrite.promise;
+  assert.ok(calls.every(call => !Array.isArray(call) || call[0] !== 'connect'));
+  latestWrite.resolve();
+  await repaired;
+  assert.deepEqual(calls, [
+    ['setSettings', {resetPairing: false}], 'disconnect', 'start forget',
+    'finish forget', ['setSettings', {ipAddress: firstAddress}],
+    ['setSettings', {ipAddress: latestAddress}], 'construct', ['connect', latestAddress, null], 'init',
+  ]);
+});
+
+test('old poll callbacks and an overlapping poll setting cannot replace the re-pair connection', async t => {
+  const {device, calls, save, run} = setup({...base, usePoll: true, pollTimeout: 1});
+  const probes = [];
+  t.mock.method(net.Socket.prototype, 'connect', (_port, _host, onConnect) => { probes.push(onConnect); });
+  let pollTick;
+  t.mock.method(global, 'setInterval', callback => { pollTick = callback; });
+  device.getCapabilityValue = () => false;
+  device.setCapabilityValue = async () => calls.push('publish power');
+  const startedDeleting = deferred();
+  const allowDelete = deferred();
+  device._forgetPairingKey = async () => {
+    calls.push('start forget');
+    startedDeleting.resolve();
+    await allowDelete.promise;
+    calls.push('finish forget');
+  };
+  device._connect = () => {
+    device.lgtv = {disconnect: () => calls.push('disconnect replacement')};
+    calls.push('connect');
+  };
+  device.poll();
+  pollTick();
+  pollTick();
+  assert.equal(probes.length, 2);
+
+  await save({resetPairing: true});
+  const repaired = run();
+  await startedDeleting.promise;
+  pollTick();
+  assert.equal(probes.length, 2);
+  probes[0]();
+  await save({usePoll: false});
+  assert.deepEqual(calls, [['setSettings', {resetPairing: false}], 'disconnect', 'start forget']);
+
+  allowDelete.resolve();
+  await repaired;
+  probes[1]();
+  assert.deepEqual(calls, [
+    ['setSettings', {resetPairing: false}], 'disconnect', 'start forget',
+    'finish forget', 'construct', 'connect', 'init',
+  ]);
 });
