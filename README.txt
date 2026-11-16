@@ -1,4 +1,8 @@
-Local webOS TV Controller 2.0.3
+Local webOS TV Controller 2.0.4
+
+Fixes a case where Homey marked an LG TV unavailable after the app restarted while the TV was in standby, preventing the existing Turn on command from reaching it. The app still uses automatic network discovery and now manages the TV’s availability separately.
+
+This Test build also includes Sascha’s manual IP pairing, an explicit re-pair setting, an opt-in unsigned pairing fallback for TVs that reject the signed certificate, and opt-in external volume stepping. Signed pairing remains the default and external volume stepping defaults to Off. Update in place to keep your TV’s pairing, settings and saved Flows.
 
 Local webOS TV Controller provides local LG webOS control, source and channel reporting, and Flow cards for TV commands. The source-reported trigger provides the raw source ID and report time, including fresh reports of the same source. Use Request current TV source to ask a connected TV for its current source.
 

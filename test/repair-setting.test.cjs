@@ -150,18 +150,18 @@ test('discovery writes crossing re-pair preserve the latest address and open onl
   };
   device._connect = () => calls.push(['connect', device.getSettings().ipAddress, key]);
 
-  await device.onDiscoveryAvailable({id: 'fixture-tv', address: firstAddress});
+  const discovery = device.handleDiscoveryResult({id: 'fixture-tv', address: firstAddress});
   await save({resetPairing: true});
   const repaired = run();
   await startedDeleting.promise;
-  await device.onDiscoveryAddressChanged({id: 'fixture-tv', address: latestAddress});
+  const newerDiscovery = device.handleDiscoveryResult({id: 'fixture-tv', address: latestAddress});
 
   allowDelete.resolve();
   firstWrite.resolve();
   await startedLatestWrite.promise;
   assert.ok(calls.every(call => !Array.isArray(call) || call[0] !== 'connect'));
   latestWrite.resolve();
-  await repaired;
+  await Promise.all([repaired, discovery, newerDiscovery]);
   assert.deepEqual(calls, [
     ['setSettings', {resetPairing: false}], 'disconnect', 'start forget',
     'finish forget', ['setSettings', {ipAddress: firstAddress}],

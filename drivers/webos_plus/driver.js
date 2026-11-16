@@ -23,10 +23,25 @@ const http = require('http')
 const https = require('https')
 const {capabilities, endpoints} = require('./webos/utils/constants')
 const {isHomeyVolume} = require('./webos/utils/numeric-volume')
+const {StandaloneDiscovery} = require('./webos/utils/standalone-discovery')
 
 class WebosPlusDriver extends Homey.Driver {
   onInit() {
     this.log('WebosPlus Driver has been inited')
+  }
+
+  onUninit() {
+    this._standaloneDiscovery?.stop()
+  }
+
+  discoveryStrategy() {
+    return this.homey.discovery.getStrategy('webos')
+  }
+
+  watchDiscovery(id, onResult) {
+    if (!id) return () => {}
+    this._standaloneDiscovery ??= new StandaloneDiscovery(this.discoveryStrategy())
+    return this._standaloneDiscovery.watch(id, onResult)
   }
 
   initReady(callback) {
@@ -459,7 +474,7 @@ class WebosPlusDriver extends Homey.Driver {
   }
 
   async onPairListDevices(data, callback) {
-    const discoveryStrategy = this.getDiscoveryStrategy()
+    const discoveryStrategy = this.discoveryStrategy()
     const discoveryResults = discoveryStrategy.getDiscoveryResults()
 
     const devices = async () => {

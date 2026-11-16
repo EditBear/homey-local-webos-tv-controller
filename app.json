@@ -1,6 +1,6 @@
 {
   "id": "com.rompa.webos-plus-g4",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "compatibility": ">=12.9.0",
   "sdk": 3,
   "name": {
@@ -1402,7 +1402,6 @@
         "nl": "webOS-tv (Automatisch)"
       },
       "class": "tv",
-      "discovery": "webos",
       "pair": [
         {
           "id": "list_devices",

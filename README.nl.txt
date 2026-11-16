@@ -1,4 +1,8 @@
-Lokale webOS-tv-controller 2.0.3
+Lokale webOS-tv-controller 2.0.4
+
+Verhelpt een probleem waarbij Homey een LG-tv na een herstart van de app als niet beschikbaar markeerde als de tv in stand-by stond. Daardoor bereikte de bestaande opdracht Inschakelen de tv niet. De app blijft de tv automatisch op het netwerk vinden en beheert de beschikbaarheid nu afzonderlijk.
+
+Deze testversie bevat ook Sascha’s handmatige koppeling via IP, een instelling om opnieuw te koppelen, een optionele ongetekende koppeling voor tv’s die het ondertekende certificaat weigeren en optionele volumeregeling in stappen voor externe audio. Ondertekende koppeling blijft de standaard en volumeregeling in stappen staat standaard uit. Werk de bestaande installatie bij om de koppeling, instellingen en opgeslagen Flows te behouden.
 
 Local webOS TV Controller biedt lokale bediening van LG webOS-tv’s, bron- en kanaalrapportage en Flow-kaarten voor tv-opdrachten. De trigger voor bronrapportage geeft de bron-ID en het tijdstip door, ook bij een nieuw rapport over dezelfde bron. Met Vraag de huidige tv-bron op kun je de actuele bron bij een verbonden tv opvragen.
 

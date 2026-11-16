@@ -30,6 +30,7 @@ const {ChannelReport, CHANNEL_CAPABILITY} = require('./webos/utils/channel-repor
 const net = require('net');
 const {normalizeMacAddress, isUsableIpv4} = require('./webos/utils/manual-setup');
 const {usableInputs, pickerValues, inputForApp, launchAppForInput} = require('./webos/utils/input-select');
+const {discoveryId} = require('./webos/utils/standalone-discovery');
 const https = require('https');
 
 const unsecureHttpsAgent = new https.Agent({
@@ -66,71 +67,57 @@ class WebosPlusDevice extends WebOSTV {
       // The transport connects asynchronously; attach reporting before yielding.
       this._connect();
       await this.initDevice();
+      if (!this._channelStopped && this.driver.manifest.id === 'webos_plus') {
+        try {
+          this._stopDiscovery = this._driver.watchDiscovery(
+            this.getData()?.id, result => this.handleDiscoveryResult(result));
+        } catch (error) {
+          this.error('startup: could not listen for TV discovery', error);
+        }
+      }
     });
   }
 
-  onDiscoveryResult(discoveryResult) {
-    const id = discoveryResult?.id;
-    const deviceId = this.getData()?.id;
-    return Boolean(deviceId) && typeof id === 'string' && id.replace(/uuid:/g, '') === deviceId;
-  }
+  handleDiscoveryResult(result) {
+    if (this._channelStopped) return;
+    const id = discoveryId(result);
+    const address = result?.address;
+    if (!id || id !== this.getData()?.id || typeof address !== 'string' ||
+        !net.isIP(address) || address === '0.0.0.0' || address === '::') return;
 
-  onDiscoveryAvailable(discoveryResult) {
-    this.setAvailable();
-    const ipAddress = this.getSettings().ipAddress;
-    this.advanceRediscoveryRetry(discoveryResult, ipAddress);
-    if (this.getSettings().manualIpAddress === true && ipAddress !== '0.0.0.0'){
-      return Promise.resolve(true);
+    const {ipAddress, manualIpAddress} = this.getSettings();
+    if (address === ipAddress && !this._discoveryAddressWrite) {
+      if (!this._resettingPairing && this.lgtv?.advanceReconnect?.(address)) {
+        this.log('Discovery: brought forward the pending reconnect for the same TV and address');
+      }
+      return;
     }
-    this.saveDiscoveredAddress(discoveryResult.address, ipAddress);
-    return Promise.resolve(true);
+    if (manualIpAddress === true && ipAddress !== '0.0.0.0') return;
+    return this.saveDiscoveredAddress(address);
   }
 
-  onDiscoveryAddressChanged(discoveryResult) {
-    this.setAvailable();
-    const ipAddress = this.getSettings().ipAddress;
-    if (this.getSettings().manualIpAddress === true && ipAddress !== '0.0.0.0'){
-      return Promise.resolve(true);
-    }
-    this.saveDiscoveredAddress(discoveryResult.address, ipAddress);
-    return Promise.resolve(true);
-  }
-
-  saveDiscoveredAddress(address, savedAddress) {
+  saveDiscoveredAddress(address) {
     const previous = this._discoveryAddressWrite;
-    if (address === (previous?.address ?? savedAddress)) return;
+    if (address === previous?.address) return previous.done;
 
     const update = {address};
     this._discoveryAddressWrite = update;
-    const save = () => this.setSettings({ipAddress: address});
+    const save = async () => {
+      if (this._channelStopped) return;
+      const {ipAddress, manualIpAddress} = this.getSettings();
+      if (manualIpAddress === true && ipAddress !== '0.0.0.0') return;
+      if (ipAddress !== address) await this.setSettings({ipAddress: address});
+      if (this._discoveryAddressWrite === update && !this._resettingPairing &&
+          !this._channelStopped && this.getSettings().ipAddress === address) {
+        await this.applyConnectionSettings(false, true);
+      }
+    };
     update.done = (previous ? previous.done.then(save) : save())
-      .then(() => {
-        if (this._discoveryAddressWrite === update && !this._resettingPairing && !this._channelStopped) {
-          this._connect();
-        }
-      })
       .catch(error => this.error(error))
       .finally(() => {
         if (this._discoveryAddressWrite === update) this._discoveryAddressWrite = null;
       });
-  }
-
-  onDiscoveryLastSeenChanged(discoveryResult) {
-    this.setAvailable();
-    this.advanceRediscoveryRetry(discoveryResult, this.getSettings().ipAddress);
-    return Promise.resolve(true);
-  }
-
-  advanceRediscoveryRetry(discoveryResult, ipAddress) {
-    const id = discoveryResult?.id;
-    const deviceId = this.getData()?.id;
-    if (this._channelStopped || this._resettingPairing || !deviceId || typeof id !== 'string' ||
-        id.replace(/^uuid:/, '') !== deviceId || discoveryResult.address !== ipAddress ||
-        typeof ipAddress !== 'string' || !net.isIP(ipAddress) || ipAddress === '0.0.0.0' || ipAddress === '::') return;
-
-    if (this.lgtv?.advanceReconnect?.(ipAddress)) {
-      this.log('Discovery: brought forward the pending reconnect for the same TV and address');
-    }
+    return update.done;
   }
 
   /**
@@ -840,12 +827,13 @@ class WebosPlusDevice extends WebOSTV {
 
   onUninit() {
     this._channelStopped = true;
+    this._stopDiscovery?.();
+    this._stopDiscovery = null;
     this.stopChannelReport();
   }
 
   onDeleted() {
-    this._channelStopped = true;
-    this.stopChannelReport();
+    this.onUninit();
   }
 
   reportChannel(newChannel) {

@@ -4,7 +4,6 @@ const assert = require('node:assert/strict');
 const Module = require('node:module');
 const path = require('node:path');
 const test = require('node:test');
-const {attempts} = require(process.env.HOMEY_OFFLINE_BARRIER || './offline-barrier.cjs');
 
 const packageDir = process.env.HOMEY_TEST_PACKAGE || path.join(__dirname, '..');
 const load = Module._load;
@@ -15,140 +14,106 @@ Module._load = function(name, ...args) {
 const Device = require(path.join(packageDir, 'drivers/webos_plus/device.js'));
 Module._load = load;
 
-const tvId = 'saved-tv';
-const ipAddress = '192.0.2.10';
-const otherAddress = '192.0.2.11';
+const id = 'saved-tv';
+const IP = '192.0.2.10';
+const NEXT = '192.0.2.11';
+const NEWEST = '192.0.2.12';
+const result = (address = IP) => ({id: 'uuid:' + id, address});
 
-function setup(settings = {}, id = tvId) {
+function setup(settings = {}) {
   const device = new Device();
   const calls = [];
+  const state = {ipAddress: IP, manualIpAddress: false, ...settings};
   const client = {
     advanceReconnect(address) {
       assert.equal(this, client);
-      assert.equal(address, ipAddress);
-      calls.push('advance');
+      calls.push(['advance', address]);
       return true;
     },
+    disconnect() { calls.push('disconnect'); },
   };
-  const currentSettings = {ipAddress, manualIpAddress: false, ...settings};
   device.lgtv = client;
-  device.getSettings = () => ({...currentSettings});
+  device.getSettings = () => ({...state});
   device.getData = () => ({id});
-  device.setAvailable = async () => calls.push('available');
   device.setSettings = async values => {
     calls.push(['setSettings', values]);
-    Object.assign(currentSettings, values);
+    Object.assign(state, values);
   };
-  device._connect = () => calls.push('connect');
+  device.construct = () => { device.lgtv = null; };
+  device._connect = () => {
+    calls.push(['connect', state.ipAddress]);
+    device.lgtv = {};
+  };
+  device.initDevice = () => calls.push('attach reporting');
   device.log = () => {};
   device.error = error => assert.fail(String(error));
-  return {device, client, calls};
+  return {device, client, state, calls};
 }
 
-test('matching discovery has no side effects across two paired TVs', async () => {
-  const first = setup();
-  const second = setup({}, 'other-tv');
-  const result = {id: 'uuid:' + tvId, address: ipAddress};
-
-  assert.equal(first.device.onDiscoveryResult(result), true);
-  assert.equal(second.device.onDiscoveryResult(result), false);
-  assert.deepEqual(second.calls, []);
-  assert.deepEqual(first.calls, []);
-  assert.equal(result.id, 'uuid:' + tvId);
-
-  await first.device.onDiscoveryAvailable(result);
-  assert.deepEqual(first.calls, ['available', 'advance']);
-  assert.deepEqual(second.calls, []);
-});
-
-test('discovery matching accepts unchanged bare and prefixed IDs on frozen results', () => {
-  const {device, calls} = setup();
-  for (const id of [tvId, 'uuid:' + tvId]) {
-    assert.equal(device.onDiscoveryResult(Object.freeze({id, address: ipAddress})), true);
-  }
-  assert.deepEqual(calls, []);
-});
-
-test('discovery matching ignores missing and malformed IDs without changing availability', () => {
-  const {device, calls} = setup();
-  for (const result of [undefined, null, {}, {id: null}, {id: 5}, {id: ''}, {id: 'uuid:'}]) {
-    assert.equal(device.onDiscoveryResult(result), false);
-  }
-  device.getData = () => ({id: ''});
-  assert.equal(device.onDiscoveryResult({id: 'uuid:'}), false);
-  assert.deepEqual(calls, []);
-});
-
-test('matching same-address discovery advances the original client in both address modes', async () => {
+test('matching same-address discovery uses the existing scheduler in both address modes', () => {
   for (const manualIpAddress of [false, true]) {
     const {device, client, calls} = setup({manualIpAddress});
-    const result = {id: 'uuid:' + tvId, address: ipAddress};
-    assert.equal(await device.onDiscoveryAvailable(result), true);
+    device.handleDiscoveryResult(Object.freeze(result()));
     assert.equal(device.lgtv, client);
-    assert.deepEqual(calls, ['available', 'advance']);
-    assert.equal(result.id, 'uuid:' + tvId);
+    assert.deepEqual(calls, [['advance', IP]]);
   }
 });
 
-test('matching last-seen notifications use the same scheduler without opening a client', async () => {
+test('foreign, malformed and placeholder discoveries have no side effects', () => {
+  const {device, calls} = setup();
+  for (const bad of [
+    undefined, null, {},
+    {id: 'uuid:other-tv', address: IP},
+    {id: 'prefixuuid:' + id, address: IP},
+    {id: null, address: IP},
+    ...[null, '', 'bad-address', '0.0.0.0', '::'].map(address => ({id, address})),
+  ]) device.handleDiscoveryResult(bad);
+  assert.deepEqual(calls, []);
+});
+
+test('a confirmed IP change retires the old client and attaches reporting to the replacement', async () => {
   const {device, client, calls} = setup();
-  const result = {id: tvId, address: ipAddress};
-  assert.equal(await device.onDiscoveryLastSeenChanged(result), true);
-  assert.equal(await device.onDiscoveryLastSeenChanged(result), true);
-  assert.equal(device.lgtv, client);
-  assert.deepEqual(calls, ['available', 'advance', 'available', 'advance']);
+  const first = device.handleDiscoveryResult(result(NEXT));
+  const duplicate = device.handleDiscoveryResult(result(NEXT));
+  await Promise.all([first, duplicate]);
+  assert.notEqual(device.lgtv, client);
+  assert.deepEqual(calls, [['setSettings', {ipAddress: NEXT}], 'disconnect', ['connect', NEXT], 'attach reporting']);
 });
 
-test('foreign and incomplete discoveries do not advance the saved client', async () => {
+test('automatic discovery never changes a fixed IP or advances a retry at another IP', () => {
   const {device, calls} = setup({manualIpAddress: true});
-  for (const result of [
-    {id: 'uuid:other-tv', address: ipAddress},
-    {id: 'prefixuuid:' + tvId, address: ipAddress},
-    {address: ipAddress},
-    {id: tvId, address: otherAddress},
-    {id: tvId},
-  ]) {
-    assert.equal(await device.onDiscoveryAvailable(result), true);
-    assert.equal(await device.onDiscoveryLastSeenChanged(result), true);
-  }
-  assert.equal(await device.onDiscoveryLastSeenChanged(undefined), true);
-  assert.equal(calls.length, 11);
-  assert.ok(calls.every(call => call === 'available'));
+  device.handleDiscoveryResult(result(NEXT));
+  assert.deepEqual(calls, []);
 });
 
-test('an unset or placeholder saved address does not advance the client', async () => {
-  for (const address of [undefined, '', '0.0.0.0', '::', 'invalid-address']) {
-    const {device, calls} = setup({ipAddress: address});
-    const result = {id: tvId, address};
-    assert.equal(await device.onDiscoveryAvailable(result), true);
-    assert.equal(await device.onDiscoveryLastSeenChanged(result), true);
-    assert.deepEqual(calls, ['available', 'available']);
-  }
+test('a queued second address replaces the first without opening a client at the obsolete address', async () => {
+  const {device, calls} = setup();
+  const first = device.handleDiscoveryResult(result(NEXT));
+  const latest = device.handleDiscoveryResult(result(NEWEST));
+  await Promise.all([first, latest]);
+  assert.deepEqual(calls, [
+    ['setSettings', {ipAddress: NEXT}], ['setSettings', {ipAddress: NEWEST}],
+    'disconnect', ['connect', NEWEST], 'attach reporting',
+  ]);
 });
 
-test('changed automatic addresses follow the existing update path in both callbacks', async () => {
-  for (const callback of ['onDiscoveryAvailable', 'onDiscoveryAddressChanged']) {
-    const {device, calls} = setup();
-    assert.equal(await device[callback]({id: tvId, address: otherAddress}), true);
-    assert.deepEqual(calls, ['available', ['setSettings', {ipAddress: otherAddress}], 'connect']);
-  }
+test('a stopped device ignores a fresh discovery and drops any queued address write', async () => {
+  const {device, calls} = setup();
+  const first = device.handleDiscoveryResult(result(NEXT));
+  const latest = device.handleDiscoveryResult(result(NEWEST));
+  device.onDeleted();
+  device.handleDiscoveryResult(result());
+  await Promise.all([first, latest]);
+  assert.deepEqual(calls, [['setSettings', {ipAddress: NEXT}]]);
 });
 
-test('address-change callbacks leave a configured manual address alone', async () => {
-  const {device, calls} = setup({manualIpAddress: true});
-  assert.equal(await device.onDiscoveryAddressChanged({id: tvId, address: otherAddress}), true);
-  assert.deepEqual(calls, ['available']);
-});
-
-test('stopped devices and devices without a client leave the scheduler alone', async () => {
-  for (const stopped of [true, false]) {
-    const {device, calls} = setup();
-    if (stopped) device.onUninit();
-    else device.lgtv = null;
-    const result = {id: tvId, address: ipAddress};
-    assert.equal(await device.onDiscoveryAvailable(result), true);
-    assert.equal(await device.onDiscoveryLastSeenChanged(result), true);
-    assert.deepEqual(calls, ['available', 'available']);
-  }
-  assert.deepEqual(attempts, []);
+test('a queued automatic change respects a fixed IP override saved while it was waiting', async () => {
+  const {device, state, calls} = setup();
+  const first = device.handleDiscoveryResult(result(NEXT));
+  const latest = device.handleDiscoveryResult(result(NEWEST));
+  state.manualIpAddress = true;
+  state.ipAddress = IP;
+  await Promise.all([first, latest]);
+  assert.equal(state.ipAddress, IP);
+  assert.deepEqual(calls, [['setSettings', {ipAddress: NEXT}]]);
 });

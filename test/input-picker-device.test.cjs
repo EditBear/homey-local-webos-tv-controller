@@ -65,13 +65,16 @@ function setup({
   let inputQueries = 0;
 
   const driver = {
+    manifest: {id: 'webos_plus'},
     initReady: callback => callback(),
+    watchDiscovery: () => () => {},
     triggerSourceReported: async (target, tokens) => {
       assert.equal(target, device);
       sourceReports.push(tokens);
     },
     triggerAppChanged: () => {},
   };
+  device.driver = driver;
   device.homey = {
     images: {createImage: async () => ({setUrl: () => {}})},
     drivers: {getDriver: () => driver},
@@ -80,6 +83,7 @@ function setup({
   device.log = () => {};
   device.error = () => {};
   device.getSettings = () => ({usePoll: false});
+  device.getData = () => ({id: 'picker-fixture-tv'});
   device.getStoreValue = id => store.get(id);
   device.setStoreValue = async (id, value) => store.set(id, value);
   device.setUnavailable = async (reason) => unavailable.push(reason);

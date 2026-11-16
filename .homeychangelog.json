@@ -1,4 +1,8 @@
 {
+  "2.0.4": {
+    "en": "Fixes a case where Homey marked an LG TV unavailable after the app restarted while the TV was in standby, preventing the existing Turn on command from reaching it. The app still uses automatic network discovery and now manages the TV’s availability separately.\n\nThis Test build also includes Sascha’s manual IP pairing, an explicit re-pair setting, an opt-in unsigned pairing fallback for TVs that reject the signed certificate, and opt-in external volume stepping. Signed pairing remains the default and external volume stepping defaults to Off. Update in place to keep your TV’s pairing, settings and saved Flows.",
+    "nl": "Verhelpt een probleem waarbij Homey een LG-tv na een herstart van de app als niet beschikbaar markeerde als de tv in stand-by stond. Daardoor bereikte de bestaande opdracht Inschakelen de tv niet. De app blijft de tv automatisch op het netwerk vinden en beheert de beschikbaarheid nu afzonderlijk.\n\nDeze testversie bevat ook Sascha’s handmatige koppeling via IP, een instelling om opnieuw te koppelen, een optionele ongetekende koppeling voor tv’s die het ondertekende certificaat weigeren en optionele volumeregeling in stappen voor externe audio. Ondertekende koppeling blijft de standaard en volumeregeling in stappen staat standaard uit. Werk de bestaande installatie bij om de koppeling, instellingen en opgeslagen Flows te behouden."
+  },
   "2.0.3": {
     "en": "Adds Sascha’s HDMI input picker to the TV device with LG labels and HDMI 1–4 fallbacks. Existing TV pairing, Flow cards and raw source IDs are preserved.",
     "nl": "Voegt Sascha’s HDMI-ingangskeuze toe aan het tv-apparaat, met LG-ingangsnamen en HDMI 1–4 als terugvalopties. Bestaande tv-koppelingen, Flow-kaarten en bron-ID’s blijven behouden."
