@@ -1,4 +1,8 @@
-Local webOS TV Controller 2.0.4
+Local webOS TV Controller 2.0.5
+
+Fixes repeated “The TV was confirmed on” Flow events when an LG TV returns from its screen saver on the same connection. The Flow still receives a confirmation after a genuine wake.
+
+Also included from 2.0.4
 
 Fixes a case where Homey marked an LG TV unavailable after the app restarted while the TV was in standby, preventing the existing Turn on command from reaching it. The app still uses automatic network discovery and now manages the TV’s availability separately.
 

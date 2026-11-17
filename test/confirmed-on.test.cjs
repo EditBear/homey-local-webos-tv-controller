@@ -25,6 +25,10 @@ const active = {state: 'Active', returnValue: true, subscribed: true};
 
 async function setup(t, usePoll = false) {
   t.mock.timers.enable({apis: ['Date', 'setTimeout'], now: start});
+  return connectDevice(usePoll);
+}
+
+async function connectDevice(usePoll = false) {
   const device = new Device();
   const client = new EventEmitter();
   const subscriptions = [];
@@ -96,6 +100,71 @@ test('standby, screen states and transition states keep legacy behavior without 
   assert.deepEqual(f.reports, []);
 });
 
+test('repeated screen-saver reports cannot confirm ON again on the same connection', async t => {
+  const firstTV = await setup(t);
+  const secondTV = await connectDevice();
+  firstTV.reply(active);
+  t.mock.timers.tick(100);
+  secondTV.reply(active);
+  t.mock.timers.tick(100);
+  firstTV.reply(active);
+
+  for (const f of [firstTV, secondTV, firstTV]) {
+    t.mock.timers.tick(180000);
+    f.reply({...active, processing: 'Request Screen Saver'});
+    t.mock.timers.tick(9);
+    f.reply({...active, processing: 'Screen On'});
+    t.mock.timers.tick(19);
+    f.reply(active);
+  }
+
+  assert.deepEqual(firstTV.reports, [{target: firstTV.device, tokens: {confirmedAt: start}}]);
+  assert.deepEqual(secondTV.reports, [{target: secondTV.device, tokens: {confirmedAt: start + 100}}]);
+});
+
+test('a steady standby or off report re-arms the next genuine ON on the retained socket', async t => {
+  const f = await setup(t);
+  f.reply(active);
+  const expected = [start];
+
+  for (const state of ['Active Standby', 'Suspend', 'Power Off']) {
+    t.mock.timers.tick(100);
+    f.reply({...active, state});
+    f.reply({...active, state, processing: ''});
+    f.reply({...active, state, processing: 'Resume'});
+    t.mock.timers.tick(10);
+    expected.push(Date.now());
+    f.reply(active);
+    t.mock.timers.tick(10);
+    f.reply(active);
+  }
+
+  assert.equal(f.subscriptions.length, 1);
+  assert.deepEqual(f.reports.map(report => report.tokens.confirmedAt), expected);
+});
+
+test('screen changes, unfinished standby and unusable power reports cannot re-arm ON', async t => {
+  const f = await setup(t);
+  f.reply(active);
+  for (const payload of [
+    {...active, state: 'Screen Off'},
+    {...active, state: 'Screen Saver'},
+    {...active, state: 'Unknown'},
+    {...active, processing: 'Request Active Standby'},
+    {...active, state: 'Active Standby', processing: 'Request Suspend'},
+    {...active, state: 'Active Standby', returnValue: false},
+    {...active, state: 'Active Standby', errorCode: 500},
+    {state: 'Active Standby'},
+  ]) {
+    f.reply(payload);
+    t.mock.timers.tick(2500);
+    f.reply(active);
+  }
+  f.reply(active, new Error('not connected'));
+  f.reply(active);
+  assert.deepEqual(f.reports.map(report => report.tokens.confirmedAt), [start]);
+});
+
 test('missing, malformed and contradictory replies cannot confirm ON', async t => {
   const f = await setup(t);
   for (const payload of [undefined, [], {subscribed: true}, {state: 'Active'},
@@ -123,7 +192,7 @@ test('a close invalidates the old subscription when the same client reconnects',
   f.reply({...active, processing: null});
   t.mock.timers.tick(50);
   f.reply({...active, processing: ''});
-  assert.deepEqual(f.reports.map(report => report.tokens.confirmedAt), [start, start + 200, start + 250]);
+  assert.deepEqual(f.reports.map(report => report.tokens.confirmedAt), [start, start + 200]);
 });
 
 test('client replacement, device stop and polling handoff suppress pending confirmations', async t => {
@@ -159,6 +228,7 @@ test('throwing or rejecting Flow delivery does not block the ordinary ON update'
     t.mock.timers.tick(2000);
     assert.equal(f.writes.length, before + 1);
     assert.equal(f.writes.at(-1).value, true);
+    f.reply({...active, state: 'Active Standby'});
   }
   assert.deepEqual(f.errors, [
     ['state report: confirmed power ON Flow', failure],

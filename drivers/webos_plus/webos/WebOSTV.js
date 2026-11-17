@@ -191,6 +191,7 @@ class WebOSTV extends Homey.Device {
     const client = this.lgtv
     let connectionOpen = true
     client.once('close', () => { connectionOpen = false })
+    let confirmedOn = false
     let timer = null
     let processing = null
     let status = null
@@ -229,11 +230,16 @@ class WebOSTV extends Homey.Device {
       processing = result.processing ? result.processing.toLowerCase() : null
       statusPowerOnReason = (res && res.powerOnReason ? res.powerOnReason : null)
 
-      // The existing ON/OFF callback also covers screen and transition states.
+      // Screen and transition reports leave the last confirmed power state alone.
       if (connectionOpen && this.lgtv === client && result.returnValue === true &&
-        status === 'active' && (result.processing == null || result.processing === '') &&
+        (result.processing == null || result.processing === '') &&
         result.errorCode == null && (result.errorText == null || result.errorText === '')) {
-        handleConfirmedOn(receivedAt)
+        if (status === 'active standby' || status === 'suspend' || status === 'power off') {
+          confirmedOn = false
+        } else if (status === 'active' && !confirmedOn) {
+          confirmedOn = true
+          handleConfirmedOn(receivedAt)
+        }
       }
 
       this.log(`_powerStateListener: ${ timer ? 'Reset' : 'Set' } timeout to ${ this.getSettings().powerStateTimeout || 2000 } ms and check the state`)

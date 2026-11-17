@@ -1,4 +1,8 @@
-Lokale webOS-tv-controller 2.0.4
+Lokale webOS-tv-controller 2.0.5
+
+Voorkomt dat de Flow-kaart voor bevestiging dat de tv aanstaat opnieuw afgaat wanneer een LG-tv op dezelfde verbinding uit de schermbeveiliging komt. Bij het ontwaken uit stand-by ontvangt de Flow nog steeds een bevestiging.
+
+Ook opgenomen sinds 2.0.4
 
 Verhelpt een probleem waarbij Homey een LG-tv na een herstart van de app als niet beschikbaar markeerde als de tv in stand-by stond. Daardoor bereikte de bestaande opdracht Inschakelen de tv niet. De app blijft de tv automatisch op het netwerk vinden en beheert de beschikbaarheid nu afzonderlijk.
 

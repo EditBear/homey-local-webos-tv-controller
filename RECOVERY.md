@@ -1,9 +1,9 @@
 # Recovery and local installation
 
 This repository contains the public source for Local webOS TV Controller
-2.0.2, [Homey Test Build 13](CHANGELOG-2.0.2.md). Tags `v2.0.1` and
-`v2.0.0` preserve Test Builds 12 and 11. Tag `v1.0.43` preserves the earlier
-Store release source.
+2.0.5, [Homey Test Build 16](CHANGELOG-2.0.5.md). Tags `v2.0.2`, `v2.0.1`
+and `v2.0.0` preserve Test Builds 13, 12 and 11. Tag `v1.0.43` preserves
+the current Live Store source.
 
 ## Requirements
 
