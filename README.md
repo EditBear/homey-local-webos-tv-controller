@@ -21,9 +21,9 @@ Original contributor credits, copyright notices and GPL-3.0-or-later licence are
 
 ## Release and source history
 
-On 23 November 2026, the unchanged 2.0.5 Build 16 was submitted to Athom for certification with automatic publication after approval; until approved, 2.0.5 remains available on Test and the regular Store release remains 1.0.43.
+On 23 November 2026, the unchanged 2.0.5 Build 16 was submitted to Athom for certification and later withdrawn for further review. It remains available on Homey Test; no Live promotion is pending. The regular Store release remains 1.0.43.
 
-**2.0.5 (Build 16)** suppresses duplicate confirmed-ON events after the LG screen saver and includes the previous wake and pairing improvements. The certification submission uses the exact package tested through Homey Test from 17 November 2026. [Full 2.0.5 changelog](CHANGELOG-2.0.5.md) · [Homey Store](https://homey.app/en-gb/app/com.rompa.webos-plus-g4/) · [Homey Test](https://homey.app/en-gb/app/com.rompa.webos-plus-g4/test/)
+**2.0.5 (Build 16)** suppresses duplicate confirmed-ON events after the LG screen saver and includes the previous wake and pairing improvements. The withdrawn submission used the exact package tested through Homey Test from 17 November 2026. [Full 2.0.5 changelog](CHANGELOG-2.0.5.md) · [Homey Store](https://homey.app/en-gb/app/com.rompa.webos-plus-g4/) · [Homey Test](https://homey.app/en-gb/app/com.rompa.webos-plus-g4/test/)
 
 Tester feedback includes one wake notification and no repeats on Daniel’s two TVs, a limited B9 upgrade report preserving pairing and saved Flows, and a successful C9 update. Daniel also reported HDMI switching after approximately 15 hours in standby on his G4; 24-hour coverage and longer standby on his second TV remain unconfirmed. The changelog records the version, model and test limits, including the older unavailable-badge and missed-ON reports.
 
