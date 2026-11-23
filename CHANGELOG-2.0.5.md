@@ -2,7 +2,7 @@
 
 Released to Homey Test on 17 November 2026.
 
-On 23 November 2026, the unchanged 2.0.5 Build 16 was submitted to Athom for certification and later withdrawn for further review. It remains available on Homey Test; no Live promotion is pending. The regular Store release remains 1.0.43.
+On 23 November 2026, 2.0.5 Build 16 was submitted to Athom for certification, withdrawn for further review and then reinstated with the same exact tested package. It is now under Athom review, with **Automatically Publish after Approval** selected. 2.0.5 remains available on Homey Test; the regular Store release remains 1.0.43 pending Athom approval.
 
 This changelog covers the changes since Homey Store version 1.0.43 and links to earlier history and Max van de Laar’s original WebOS Plus. [Homey Test](https://homey.app/en-gb/app/com.rompa.webos-plus-g4/test/) · [1.0.43 source](https://github.com/EditBear/homey-local-webos-tv-controller/tree/v1.0.43) · [Original and 1.x history](CHANGELOG-2.0.0.md)
 
@@ -57,4 +57,4 @@ The LG G4 passed the restart-in-standby wake check. Daniel reported that both of
 
 ## Build provenance
 
-This source corresponds to 2.0.5 Build 16, first released through Homey Test. The withdrawn certification submission used the same tested package without a rebuild or runtime change. The SHA-256 for the archive submitted to Athom was `5362c0e46d000c501cc98971e0809031f1bd60bd53d178c56ab5f8fb131f0795`. Athom’s processed archive was `234749cf52f7ffa4ff7d653badc8ac49060cd183815d6716f49cac46255dbb58`. Athom kept the same 83 files, reformatted the manifest without changing its content, and preserved every other file byte for byte. The repository also carries contributor documentation and offline tests. [Build instructions](README.md#build-and-test) · [Maintainership](MAINTAINERSHIP.md)
+This source corresponds to 2.0.5 Build 16, first released through Homey Test. The reinstated certification submission uses the same tested package without a rebuild or runtime change. The SHA-256 for the archive submitted to Athom was `5362c0e46d000c501cc98971e0809031f1bd60bd53d178c56ab5f8fb131f0795`. Athom’s processed archive was `234749cf52f7ffa4ff7d653badc8ac49060cd183815d6716f49cac46255dbb58`. Athom kept the same 83 files, reformatted the manifest without changing its content, and preserved every other file byte for byte. The repository also carries contributor documentation and offline tests. [Build instructions](README.md#build-and-test) · [Maintainership](MAINTAINERSHIP.md)

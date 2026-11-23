@@ -2,9 +2,9 @@
 
 This repository contains the public source for Local webOS TV Controller
 2.0.5, [Build 16](CHANGELOG-2.0.5.md), first released through Homey Test on
-17 November 2026. The withdrawn certification submission used the exact tested package.
+17 November 2026. The reinstated certification submission uses the exact tested package.
 
-On 23 November 2026, the unchanged 2.0.5 Build 16 was submitted to Athom for certification and later withdrawn for further review. It remains available on Homey Test; no Live promotion is pending. The regular Store release remains 1.0.43.
+On 23 November 2026, 2.0.5 Build 16 was submitted to Athom for certification, withdrawn for further review and then reinstated with the same exact tested package. It is now under Athom review, with **Automatically Publish after Approval** selected. 2.0.5 remains available on Homey Test; the regular Store release remains 1.0.43 pending Athom approval.
 
 Tags `v2.0.2`, `v2.0.1` and `v2.0.0` preserve Test Builds 13, 12 and 11.
 Tag `v1.0.43` preserves the 1.0.43 Live Store source.
