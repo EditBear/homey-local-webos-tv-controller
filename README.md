@@ -10,26 +10,30 @@ Use the explicit Play, Pause, Fast Forward and Rewind cards for playback. Existi
 
 App or input uses speaker_artist and Channel uses speaker_track. Some Homey-generated cards use Artist or Track wording. The older webos_display.app and webos_display.channel tags follow these reports on devices that already have them. Channel is empty outside Live TV or when the tuner has no current report. Use the current fields for new Flows.
 
-Requires Homey 12.9.0 or later. The 2.0.5 Test wake and screen-saver check passed on an LG G4 running webOS 25. The optional **Allow unsigned pairing** setting applies when a TV rejects the signed pairing certificate as blacklisted. See the changelog for the scope of the tests and the limits of pairing support. If you are upgrading, keep the app and TV device installed so Homey can retain pairing, settings and saved Flow bindings. Flows that use the experimental Capture raw LG application diagnostics card from 1.0.51 Test need to remove that card.
+Requires Homey 12.9.0 or later. The 2.0.5 Test wake and screen-saver check passed on an LG G4 running webOS 25. The optional **Allow unsigned pairing** setting applies only when a TV rejects the signed pairing certificate as blacklisted; signed pairing remains the default on both drivers. Sascha confirmed unsigned pairing on his C2 running webOS 25. This is not verification across webOS 26 TVs, and unsigned registration may provide reduced permissions. See the changelog for the scope of the tests and remaining limits. If you are upgrading, keep the app and TV device installed so Homey can retain pairing, settings and saved Flow bindings. Flows that use the experimental Capture raw LG application diagnostics card from 1.0.51 Test need to remove that card.
 
-Homey's volume_set capability takes normalized values from 0 to 1; original custom volume conditions use 0 to 100. This does not make LG and external-speaker scales interchangeable. For Sonos, keep numeric volume control on the Sonos device and preserve existing volume limits. Do not use a TV reading as a Sonos volume value or automatically restore a guessed level. Explicit TV mute/unmute remains available.
+Homey's volume_set capability takes normalized values from 0 to 1; original custom volume conditions use 0 to 100. This does not make LG and external-speaker scales interchangeable. External-output volume stepping defaults to Off and requires a fresh reading for the selected output. For Sonos, keep numeric volume control on the Sonos device and preserve existing volume limits. Do not use a TV reading as a Sonos volume value or automatically restore a guessed level. Explicit TV mute/unmute remains available.
 
 The app improves TV-speaker volume handling, source and channel freshness, command errors, remote buttons and alert closing. The LG 500 Application error on a background tuner report leaves Channel blank. An explicit command error still reaches the Flow.
 
 Based on Max van de Laar's WebOS Plus: https://github.com/MaxvandeLaar/homey-webos-plus
 Original contributor credits, copyright notices and GPL-3.0-or-later licence are retained. The upstream project is credited as the source, not as support for this derivative. Use the app listing's support contact for this version.
 
-## Test release and source history
+## Release and source history
 
-**2.0.5 (Build 16)** is the Homey Test release. It suppresses duplicate confirmed-ON events after the LG screen saver and includes the previous wake and pairing improvements. The regular Homey Store release remains **1.0.43**. [Full 2.0.5 changelog](CHANGELOG-2.0.5.md) · [Homey Test](https://homey.app/en-gb/app/com.rompa.webos-plus-g4/test/)
+On 23 November 2026, the unchanged 2.0.5 Build 16 was submitted to Athom for certification with automatic publication after approval; until approved, 2.0.5 remains available on Test and the regular Store release remains 1.0.43.
 
-Tags `v2.0.2`, `v2.0.1` and `v2.0.0` preserve Homey Test Builds 13, 12 and 11. Tag `v1.0.43` preserves the current Live Store source. [2.0.1 changelog](CHANGELOG-2.0.1.md) · [2.0.0 and earlier history](CHANGELOG-2.0.0.md) · [Homey Community thread](https://community.homey.app/t/lg-webos-better-integration/15007/552)
+**2.0.5 (Build 16)** suppresses duplicate confirmed-ON events after the LG screen saver and includes the previous wake and pairing improvements. The certification submission uses the exact package tested through Homey Test from 17 November 2026. [Full 2.0.5 changelog](CHANGELOG-2.0.5.md) · [Homey Store](https://homey.app/en-gb/app/com.rompa.webos-plus-g4/) · [Homey Test](https://homey.app/en-gb/app/com.rompa.webos-plus-g4/test/)
+
+Tester feedback includes one wake notification and no repeats on Daniel’s two TVs, a limited B9 upgrade report preserving pairing and saved Flows, and a successful C9 update. Daniel also reported HDMI switching after approximately 15 hours in standby on his G4; 24-hour coverage and longer standby on his second TV remain unconfirmed. The changelog records the version, model and test limits, including the older unavailable-badge and missed-ON reports.
+
+Tags `v2.0.2`, `v2.0.1` and `v2.0.0` preserve Homey Test Builds 13, 12 and 11. Tag `v1.0.43` preserves the 1.0.43 Live Store source. [2.0.1 changelog](CHANGELOG-2.0.1.md) · [2.0.0 and earlier history](CHANGELOG-2.0.0.md) · [Homey Community thread](https://community.homey.app/t/lg-webos-better-integration/15007/552)
 
 Contributions and offers to maintain the app are welcome. [Contributing](CONTRIBUTING.md) · [Maintainers](MAINTAINERSHIP.md)
 
 ## Build and test
 
-Use Node.js 22.12 or later in the 22 series, or Node.js 24 or newer, with npm. Apply the bundled reconnect patch after each `npm ci`. The script verifies the patched dependency used in Homey Test Build 16. The launcher uses Homey CLI 4.4.1.
+Use Node.js 22.12 or later in the 22 series, or Node.js 24 or newer, with npm. Apply the bundled reconnect patch after each `npm ci`. The script verifies the patched dependency used in 2.0.5 Build 16. The launcher uses Homey CLI 4.4.1.
 
 ```sh
 npm ci --omit=dev
